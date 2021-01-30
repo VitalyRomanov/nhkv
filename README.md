@@ -4,7 +4,7 @@ Library for *almost* native python key-value storage. The use case is primarily 
 
 ## Requirements
 
-Key-value store relies on Python's sqlite3 and mmap modules. 
+Key-value store relies on Python's shelve (or sqlite3) and mmap modules. 
 
 ## Alternatives
 
