@@ -85,7 +85,7 @@ class KVStore(CompactKeyValueStore):
         if type(self.index) is DbDict:
             if type(key) is not str:
                 raise TypeError(f"Key type should be `str` when `sqlite` is used for index backend, but {type(key)} given.")
-        return self.index[key]
+        return self.get_with_id(key)
 
     def save(self):
         self.save_param()

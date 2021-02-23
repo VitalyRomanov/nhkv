@@ -14,15 +14,19 @@ Closet is closely related to libraries such as
 3. Chest - does not scale as much
 4. Shove - requires configuration of the backend storage
 
-Benchmark based on writing 100Mb worth of strings into a key-value storage.
+[comment]: <> (Benchmark based on writing 100Mb worth of strings into a key-value storage.)
 
-| |Pure Sqlite|Shelve|Sqlitedict|Closet|
-|---|---|---|---|---|
-|Batch Import, s|0.7690|0.95|1.91|0.28|
-|Batch Readout, s|1.20|0.47|1.91|0.036 (0.14 with `sqlite` backend)|
-|Disk Storage Size, Mb|107.4|~34Gb|107.5|103.8|
+[comment]: <> (| |Pure Sqlite|Shelve|Sqlitedict|Closet|)
 
-Disclamer: Cleset's read performance is so much greater primarily to hashing in `shelve` library.
+[comment]: <> (|---|---|---|---|---|)
+
+[comment]: <> (|Batch Import, s|0.7690|0.95|1.91|0.28|)
+
+[comment]: <> (|Batch Readout, s|1.20|0.47|1.91|0.036 &#40;0.14 with `sqlite` backend&#41;|)
+
+[comment]: <> (|Disk Storage Size, Mb|107.4|~34Gb|107.5|103.8|)
+
+[comment]: <> (Disclamer: Cleset's read performance is so much greater primarily to hashing in `shelve` library.)
 
 
 
