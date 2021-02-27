@@ -4,30 +4,23 @@ Library for *almost* native python key-value storage. The use case is primarily 
 
 ## Requirements
 
-Key-value store relies on Python's shelve (or sqlite3) and mmap modules. 
+Key-value store relies on Python's Shelve (or sqlite3) and mmap modules. 
 
 ## Alternatives
 
 Closet is closely related to libraries such as 
 1. Shelve - has non-zero probability of key collision
-2. Sqlitedict - slower
+2. Sqlitedict - slower reads
 3. Chest - does not scale as much
 4. Shove - requires configuration of the backend storage
 
-[comment]: <> (Benchmark based on writing 100Mb worth of strings into a key-value storage.)
+Benchmark based on writing 300Mb worth of strings into a key-value storage.
 
-[comment]: <> (| |Pure Sqlite|Shelve|Sqlitedict|Closet|)
-
-[comment]: <> (|---|---|---|---|---|)
-
-[comment]: <> (|Batch Import, s|0.7690|0.95|1.91|0.28|)
-
-[comment]: <> (|Batch Readout, s|1.20|0.47|1.91|0.036 &#40;0.14 with `sqlite` backend&#41;|)
-
-[comment]: <> (|Disk Storage Size, Mb|107.4|~34Gb|107.5|103.8|)
-
-[comment]: <> (Disclamer: Cleset's read performance is so much greater primarily to hashing in `shelve` library.)
-
+| |Pure Sqlite|Shelve|Sqlitedict|Closet.KVStore|
+|---|---|---|---|---|
+|Batch Import, s|71.49|-|56.35|98.82|
+|Batch Readout, s|20.24|-|22.62|5.50|
+|Disk Storage Size, Mb|322.3|-|322.7|310.2|
 
 
 ## Installation
@@ -53,6 +46,4 @@ same_object = kv_store["string_key"]
 
 ## Limitation
 
-Coset ises off-memory index backed by `shelve` or `sqlite`. `shelve` is based on Python's shelve library. It relies on key hashing and collisions are possible. Additionally, `shelve` storage occupies more space on disk. There is no collisions with `sqlite`, but key value must be string.
-
-If for large datasets avoiding key collisions might be important. In this case `sqlite` should be used for index backend. In this case, Closet is better suited for batch writes and consecutive batch reads. Alterating many reads and writes will result in more frequent `commit` calls for sqlite backend and will degrade the performance.
+Closet uses off-memory index backed by `shelve` or `sqlite`. `shelve` is based on Python's Shelve library. It relies on key hashing and collisions are possible. Additionally, `shelve` storage occupies more space on disk. There are no collisions with `sqlite`, but key value must be string. For large datasets avoiding key collisions might be important. In this case `sqlite` should be used for index backend. In this case, Closet is better suited for the batch writes and consecutive batch reads. Alternating many reads and writes will result in more frequent `commit` calls for sqlite backend and will degrade the performance.
