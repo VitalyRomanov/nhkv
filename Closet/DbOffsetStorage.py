@@ -8,7 +8,7 @@ class DbOffsetStorage:
         self.db = sqlite3.connect(path)
         self.cur = self.db.cursor()
         self.cur.execute("CREATE TABLE IF NOT EXISTS offset_storage ("
-                         "key TEXT PRIMARY KEY NOT NULL UNIQUE, "
+                         "key INTEGER PRIMARY KEY NOT NULL UNIQUE, "
                          "shard INTEGER NOT NULL, "
                          "position INTEGER NOT NULL, "
                          "bytes INTEGER NOT NULL)")
@@ -38,6 +38,9 @@ class DbOffsetStorage:
         if self.requires_commit:
             self.commit()
         return self.cur.execute("SELECT COUNT() FROM offset_storage").fetchone()[0]
+
+    def save(self):
+        self.commit()
 
 
 def test_DbOffsetStorage():
