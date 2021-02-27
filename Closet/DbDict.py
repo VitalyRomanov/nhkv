@@ -41,7 +41,6 @@ class DbDict:
             key = key[:self.STR_KEY_LIMIT]
         return key
 
-
     def __getitem__(self, key):
         if self.requires_commit:
             self.commit()

@@ -4,7 +4,7 @@ from Closet import CompactKeyValueStore, DbDict, KVStore
 import shelve
 import sqlite3
 from sqlitedict import SqliteDict
-import pickle as p
+# import pickle as p
 import pandas as pd
 
 
@@ -14,9 +14,10 @@ def test_sqlite3_write(text):
     cur.execute("CREATE TABLE IF NOT EXISTS [mydict] ("
                 "[key] VARCHAR(255) PRIMARY KEY NOT NULL, "
                 "[value] VARCHAR(255) NOT NULL)")
-    for i, line in enumerate(text):
-        cur.execute("INSERT INTO [mydict] (key, value) VALUES (?, ?)",
-                    (str(i), line))   
+    for j in range(3):
+        for i, line in enumerate(text):
+            cur.execute("INSERT INTO [mydict] (key, value) VALUES (?, ?)",
+                        (str(i+j*len(text)), line))
     conn.commit()
     cur.close()
     conn.close()
@@ -24,31 +25,35 @@ def test_sqlite3_write(text):
 
 def test_shelve_write(text):
     d = shelve.open(f"debug_{datasize}.shelf", protocol=4)
-    for i, line in enumerate(text):
-        d[str(i)] = line
+    for j in range(3):
+        for i, line in enumerate(text):
+            d[str(i+j*len(text))] = line
     d.close()
 
 
 def test_sqlitedict_write(text):
     d = SqliteDict(f'debug_{datasize}.sqlite')
-    for i, line in enumerate(text):
-        d[str(i)] = line
+    for j in range(3):
+        for i, line in enumerate(text):
+            d[str(i+j*len(text))] = line
     d.commit()
     d.close()
 
 
 def test_DbDict_write(text):
     d = DbDict(f"debugdb_{datasize}.s3db")
-    for i, line in enumerate(text):
-        d[str(i)] = line
+    for j in range(3):
+        for i, line in enumerate(text):
+            d[str(i+j*len(text))] = line
     d.commit()
     d.close()
 
 
 def test_kvstore_write(text):
     d = CompactKeyValueStore(f"debugdb_{datasize}.kv")
-    for i, line in enumerate(text):
-        d[str(i)] = line
+    for j in range(3):
+        for i, line in enumerate(text):
+            d[i+j*len(text)] = line
     d.commit()
     d.close()
     d.save()
@@ -56,8 +61,9 @@ def test_kvstore_write(text):
 
 def test_diskkvstore_write(text):
     d = KVStore(f"debugdb_{datasize}.diskkv")
-    for i, line in enumerate(text):
-        d[str(i)] = line
+    for j in range(3):
+        for i, line in enumerate(text):
+            d[i+j*len(text)] = line
     d.commit()
     d.close()
     d.save()
@@ -66,56 +72,68 @@ def test_diskkvstore_write(text):
 def test_sqlite3_read(datasize):
     conn = sqlite3.connect(f"debug_{datasize}.s3db")
     cur = conn.cursor()
-    for i in range(0, datasize):
-        cur.execute("select [value] from [mydict] where [key]=?", (str(i),))
-        a = cur.fetchall()
+    for j in range(3):
+        for i in range(0, datasize):
+            cur.execute("select [value] from [mydict] where [key]=?", (str(i+j*len(text)),))
+            a = cur.fetchone()[0]
+            assert a == text[i]
     cur.close()
     conn.close()
 
 
 def test_shelve_read(datasize):
     d = shelve.open(f"debug_{datasize}.shelf", protocol=4)
-    for i in range(0, datasize):
-        a = d[str(i)]
+    for j in range(3):
+        for i in range(0, datasize):
+            a = d[str(i+j*len(text))]
+            assert a == text[i]
     d.close()
 
 
 def test_sqlitedict_read(datasize):
     d = SqliteDict(f'debug_{datasize}.sqlite')
-    for i in range(0, datasize):
-        a = d[str(i)]
+    for j in range(3):
+        for i in range(0, datasize):
+            a = d[str(i+j*len(text))]
+            assert a == text[i]
     d.close()
 
 
 def test_DbDict_read(datasize):
     d = DbDict(f"debugdb_{datasize}.s3db")
-    for i in range(0, datasize):
-        a = d[str(i)]
+    for j in range(3):
+        for i in range(0, datasize):
+            a = d[str(i+j*len(text))]
+            assert a == text[i]
     d.close()
 
 
 def test_kvstore_read(datasize):
     d = CompactKeyValueStore.load(f"debugdb_{datasize}.kv")
-    for i in range(0, datasize):
-        a = d[str(i)]
+    for j in range(3):
+        for i in range(0, datasize):
+            a = d[i+j*len(text)]
+            assert a == text[i]
     d.close()
 
 
 def test_diskkvstore_read(datasize):
     d = KVStore.load(f"debugdb_{datasize}.diskkv")
-    for i in range(0, datasize):
-        a = d[str(i)]
+    for j in range(3):
+        for i in range(0, datasize):
+            a = d[i+j*len(text)]
+            assert a == text[i]
     d.close()
 
 
 import time
 
-text = open(sys.argv[1], "r").readlines()[:100]
+text = open(sys.argv[1], "r").readlines()
 
 writes = {
     "index": [],
     "sqlite3": [],
-    "shelve": [],
+    # "shelve": [],
     "sqlitedict": [],
     "DbDict": [],
     "CompactKVStore": [],
@@ -132,12 +150,12 @@ for datasize in [len(text)]:
     writes["sqlite3"].append(emd_time - start_time)
     # writes.append({"Type": "sqlite3", "datasize": datasize, "time": emd_time - start_time})
 
-    start_time = time.time()
-    test_shelve_write(text)
-    emd_time = time.time()
-    print("--- %s seconds ---" % (emd_time - start_time))
-    writes["shelve"].append(emd_time - start_time)
-    # writes.append({"Type": "shelve", "datasize": datasize, "time": emd_time - start_time})
+    # start_time = time.time()
+    # test_shelve_write(text)
+    # emd_time = time.time()
+    # print("--- %s seconds ---" % (emd_time - start_time))
+    # writes["shelve"].append(emd_time - start_time)
+    # # writes.append({"Type": "shelve", "datasize": datasize, "time": emd_time - start_time})
 
     start_time = time.time()
     test_sqlitedict_write(text)
@@ -174,7 +192,7 @@ writes.to_csv("writes.csv")
 reads = {
     "index": [],
     "sqlite3": [],
-    "shelve": [],
+    # "shelve": [],
     "sqlitedict": [],
     "DbDict": [],
     "CompactKVStore": [],
@@ -191,12 +209,12 @@ for datasize in [len(text)]:
     reads["sqlite3"].append(emd_time - start_time)
     # reads.append({"Type": "sqlite3", "datasize": datasize, "time": emd_time - start_time})
 
-    start_time = time.time()
-    test_shelve_read(datasize)
-    emd_time = time.time()
-    print("--- %s seconds ---" % (emd_time - start_time))
-    reads["shelve"].append(emd_time - start_time)
-    # reads.append({"Type": "shelve", "datasize": datasize, "time": emd_time - start_time})
+    # start_time = time.time()
+    # test_shelve_read(datasize)
+    # emd_time = time.time()
+    # print("--- %s seconds ---" % (emd_time - start_time))
+    # reads["shelve"].append(emd_time - start_time)
+    # # reads.append({"Type": "shelve", "datasize": datasize, "time": emd_time - start_time})
 
     start_time = time.time()
     test_sqlitedict_read(datasize)
