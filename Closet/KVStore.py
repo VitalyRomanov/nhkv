@@ -108,14 +108,17 @@ class CompactKeyValueStore:
             raise KeyError("Key does not exist:", key)
 
     def get_with_id(self, doc_id):
-        shard, pos, len_ = self.index[doc_id]
+        triplet = self.index[doc_id]
+        if type(triplet) is None:
+            raise KeyError("Key not found: ", doc_id)
+        shard, pos, len_ = triplet
         if len_ == 0:
             raise ValueError("Entry length is 0")
         _, mm = self.reading_mode(shard)
         return pickle.loads(mm[pos: pos+len_])
 
     def get_name_format(self, id_):
-        return 'postings_shard_{0:04d}'.format(id_)
+        return 'store_shard_{0:04d}'.format(id_)
 
     def open_for_read(self, name):
         # raise file not exists
@@ -162,7 +165,7 @@ class CompactKeyValueStore:
             self.shard_size,
             self.path,
             self.key_map
-        ), open(os.path.join(self.path, "postings_params"), "wb"), protocol=4)
+        ), open(os.path.join(self.path, "store_params"), "wb"), protocol=4)
 
     def load_param(self):
         self.file_index,\
@@ -170,13 +173,13 @@ class CompactKeyValueStore:
             self.written_in_current_shard,\
             self.shard_size,\
             self.path, \
-            self.key_map = pickle.load(open(os.path.join(self.path, "postings_params"), "rb"))
+            self.key_map = pickle.load(open(os.path.join(self.path, "store_params"), "rb"))
 
     def save_index(self):
-        pickle.dump(self.index, open(os.path.join(self.path, "postings_index"), "wb"), protocol=4)
+        pickle.dump(self.index, open(os.path.join(self.path, "store_index"), "wb"), protocol=4)
 
     def load_index(self):
-        self.index = pickle.load(open(os.path.join(self.path, "postings_index"), "rb"))
+        self.index = pickle.load(open(os.path.join(self.path, "store_index"), "rb"))
 
     def save(self):
         self.save_index()
@@ -185,10 +188,10 @@ class CompactKeyValueStore:
 
     @classmethod
     def load(cls, path):
-        postings = CompactKeyValueStore(path)
-        postings.load_param()
-        postings.load_index()
-        return postings
+        store = CompactKeyValueStore(path)
+        store.load_param()
+        store.load_index()
+        return store
 
     def close_all_shards(self):
         for shard in self.opened_shards.values():
@@ -236,18 +239,18 @@ class KVStore(CompactKeyValueStore):
         self.shard_size = shard_size
 
     def infer_backend(self):
-        if os.path.isfile(os.path.join(self.path, "index.shelve.db")):
+        if os.path.isfile(os.path.join(self.path, "store_index.shelve.db")):
             return "shelve"
-        elif os.path.isfile(os.path.join(self.path, "index.s3db")):
+        elif os.path.isfile(os.path.join(self.path, "store_index.s3db")):
             return "sqlite"
         else:
             raise FileNotFoundError("No index file found.")
 
     def get_index_path(self, index_backend):
         if index_backend == "shelve":
-            index_path = os.path.join(self.path, "index.shelve")
+            index_path = os.path.join(self.path, "store_index.shelve")
         elif index_backend == "sqlite":
-            index_path = os.path.join(self.path, "index.s3db")
+            index_path = os.path.join(self.path, "store_index.s3db")
         else:
             raise ValueError(f"`index_backend` should be `shelve` or `sqlite`, but `{index_backend}` is provided.")
         return index_path
@@ -295,8 +298,12 @@ class KVStore(CompactKeyValueStore):
         return self.get_with_id(key)
 
     def save(self):
+        self.commit()
         self.save_param()
         self.close_all_shards()
+
+    def save_index(self):
+        pass
 
     def commit(self):
         super(KVStore, self).commit()
@@ -307,6 +314,9 @@ class KVStore(CompactKeyValueStore):
 
     @classmethod
     def load(cls, path):
-        postings = KVStore(path, index_backend=None)
-        postings.load_param()
-        return postings
+        store = KVStore(path, index_backend=None)
+        store.load_param()
+        return store
+
+    def load_index(self):
+        pass
