@@ -1,6 +1,6 @@
-# Closet
+# no_hassle_kv
 
-Library for *almost* native python key-value storage. The use case is primarily directed towards storing large objects.
+Library for python native on-disk key-value storage. The use case is primarily directed towards storing large objects.
 
 ## Requirements
 
