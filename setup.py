@@ -1,12 +1,10 @@
 from distutils.core import setup
 # from setuptools import setup, find_packages
 
-setup(name='Closet',
+setup(
+      name='no_hassle_kv',
       version='0.0.1',
-      py_modules=['Closet'],
-      install_requires=[
-            'numpy',
-      ],
-      scripts=[
-      ],
+      py_modules=['no_hassle_kv'],
+      install_requires=[],
+      scripts=[],
 )

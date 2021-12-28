@@ -1,6 +1,6 @@
 import sys
 
-from Closet import CompactKeyValueStore, DbDict, KVStore
+from no_hassle_kv import CompactKeyValueStore, DbDict, KVStore
 import shelve
 import sqlite3
 from sqlitedict import SqliteDict
