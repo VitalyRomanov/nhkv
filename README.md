@@ -8,7 +8,7 @@ Key-value store relies on Python's Shelve (or sqlite3) and mmap modules.
 
 ## Alternatives
 
-Closet is closely related to libraries such as 
+no_hassle_kv is closely related to libraries such as 
 1. Shelve - has non-zero probability of key collision
 2. Sqlitedict - slower reads
 3. Chest - does not scale as much
@@ -16,7 +16,7 @@ Closet is closely related to libraries such as
 
 Benchmark based on writing 300Mb worth of strings into a key-value storage.
 
-| |Pure Sqlite|Shelve|Sqlitedict|Closet.KVStore|
+| |Pure Sqlite|Shelve|Sqlitedict|no_hassle_kv.KVStore|
 |---|---|---|---|---|
 |Batch Import, s|71.49|-|56.35|98.82|
 |Batch Readout, s|20.24|-|22.62|5.50|
@@ -26,19 +26,19 @@ Benchmark based on writing 300Mb worth of strings into a key-value storage.
 ## Installation
 
 ```bash
-pip install git+https://github.com/VitalyRomanov/Closet.git
+pip install git+https://github.com/VitalyRomanov/no_hassle_kv.git
 ```
 
 ## Usage
 
 ```python
-from Closet import KVStore
+from no_hassle_kv import KVStore
 
 storage_path = "~/storage"
 
 ...
 
-kv_store = KVStore(storage_path, shard_size=2**30, index_backend='sqlite')
+kv_store = KVStore(storage_path, shard_size=2**30, index_backend="sqlite")
 kv_store["string_key"] = large_object
 
 same_object = kv_store["string_key"]
