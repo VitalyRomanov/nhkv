@@ -1,9 +1,10 @@
+import sys
 from pathlib import Path
 from typing import Optional
 
 from no_hassle_kv import DbDict
 import shelve
-import pickle
+import dill as pickle
 
 from no_hassle_kv.DbOffsetStorage import DbOffsetStorage
 from no_hassle_kv.CompactStorage import CompactStorage
@@ -20,11 +21,20 @@ class CompactKeyValueStore:
     written_in_current_shard = 0
     shard_size = 0
 
-    def __init__(self, path, shard_size=2**30, **kwargs):
+    def __init__(self, path, shard_size=2**30, serializer=None, deserializer=None, **kwargs):
         self.path = Path(path)
 
+        self.init_serializers(serializer, deserializer)
         self.initialize_file_index(shard_size, **kwargs)
         self.initialize_offset_index(**kwargs)
+
+    def init_serializers(self, serializer, deserializer):
+        if serializer is not None and deserializer is not None:
+            self.serialize = serializer
+            self.deserialize = deserializer
+        else:
+            self.serialize = lambda value: pickle.dumps(value, protocol=4)
+            self.deserialize = lambda value: pickle.loads(value)
 
     def initialize_file_index(self, shard_size, **kwargs):
         self.file_index = dict()  # (shard, filename)
@@ -50,7 +60,8 @@ class CompactKeyValueStore:
                 raise ValueError("Keys should be integers when setting compact_ensured=True")
             key_: int = key
 
-        serialized = pickle.dumps(value, protocol=4)
+        # serialized = pickle.dumps(value, protocol=4)
+        serialized = self.serialize(value)
 
         try:
             existing_shard, existing_pos, existing_len = self.index[key_]  # check if there is an entry with such key
@@ -104,15 +115,22 @@ class CompactKeyValueStore:
         except ValueError:
             raise KeyError("Key does not exist:", key)
 
+    def get(self, key, default):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
     def get_with_id(self, doc_id):
         triplet = self.index[doc_id]
-        if type(triplet) is None:
+        if triplet is None:
             raise KeyError("Key not found: ", doc_id)
         shard, pos, len_ = triplet
         if len_ == 0:
             raise ValueError("Entry length is 0")
         _, mm = self.reading_mode(shard)
-        return pickle.loads(mm[pos: pos+len_])
+        return self.deserialize(mm[pos: pos+len_])
+        # return pickle.loads(mm[pos: pos+len_])
 
     def get_name_format(self, id_):
         return 'store_shard_{0:04d}'.format(id_)
@@ -154,23 +172,48 @@ class CompactKeyValueStore:
             self.opened_shards[id_] = self.open_for_read(self.file_index[id_])
         return self.opened_shards[id_]
 
+    @property
+    def runtime_version(self):
+        return f"python_{sys.version_info.major}.{sys.version_info.minor}"
+
+    def get_class_name(self):
+        return self.__class__.__name__
+
+    @property
+    def class_name(self):
+        return self.get_class_name()
+
+    @staticmethod
+    def get_variables_for_saving():
+        return [
+            "runtime_version",
+            "class_name",
+            "file_index",
+            "shard_for_write",
+            "written_in_current_shard",
+            "shard_size",
+            "path",
+            "key_map"
+        ]
+
     def save_param(self):
-        pickle.dump((
-            self.file_index,
-            self.shard_for_write,
-            self.written_in_current_shard,
-            self.shard_size,
-            self.path,
-            self.key_map
-        ), open(self.path.joinpath("store_params"), "wb"), protocol=4)
+        pickle.dump(
+            [getattr(self, v) for v in self.get_variables_for_saving()],
+            open(self.path.joinpath("store_params"), "wb"), protocol=4
+        )
 
     def load_param(self):
-        self.file_index,\
-            self.shard_for_write,\
-            self.written_in_current_shard,\
-            self.shard_size,\
-            self.path, \
-            self.key_map = pickle.load(open(self.path.joinpath("store_params"), "rb"))
+        params = pickle.load(open(self.path.joinpath("store_params"), "rb"))
+        variable_names = self.get_variables_for_saving()
+
+        assert len(params) == len(variable_names)
+        runtime_version = params.pop(0)
+        class_name = params.pop(0)
+        assert runtime_version == self.runtime_version
+        assert class_name == self.class_name
+
+        for name, var in zip(variable_names[2:], params):
+            setattr(self, name, var)
 
     def save_index(self):
         pickle.dump(self.index, open(self.path.joinpath("store_index"), "wb"), protocol=4)
@@ -206,7 +249,10 @@ class CompactKeyValueStore:
 
 
 class KVStore(CompactKeyValueStore):
-    def __init__(self, path, shard_size=2 ** 30, index_backend: Optional[str] = "sqlite", **kwargs):
+    def __init__(
+            self, path, shard_size=2 ** 30, serializer=None, deserializer=None,
+            index_backend: Optional[str] = "sqlite", **kwargs
+    ):
         """
         Create a disk backed key-value storage.
         :param path: Location on the disk.
@@ -216,7 +262,9 @@ class KVStore(CompactKeyValueStore):
             `shelve` storage occupies more space on disk. There is no collisions with `sqlite`, but key value is must
             be string.
         """
-        super().__init__(path, shard_size, index_backend="sqlite", **kwargs)
+        super().__init__(
+            path, shard_size, serializer=serializer, deserializer=deserializer, index_backend="sqlite", **kwargs
+        )
         self.check_dir_exists()
 
     def initialize_offset_index(self, index_backend="sqlite", **kwargs):
@@ -259,7 +307,8 @@ class KVStore(CompactKeyValueStore):
                 raise TypeError(
                     f"Key type should be `str` when `sqlite` is used for index backend, but {type(key)} given."
                 )
-        serialized = pickle.dumps(value, protocol=4)
+        # serialized = pickle.dumps(value, protocol=4)
+        serialized = self.serialize(value)
 
         # try:
         #     existing_shard, existing_pos, existing_len = self.index[key] # check if there is an entry with such key
@@ -288,13 +337,8 @@ class KVStore(CompactKeyValueStore):
                 )
         return self.get_with_id(key)
 
-    def save(self):
-        self.commit()
-        self.save_param()
-        self.close_all_shards()
-
     def save_index(self):
-        pass
+        self.commit()
 
     def commit(self):
         super(KVStore, self).commit()
@@ -305,7 +349,7 @@ class KVStore(CompactKeyValueStore):
 
     @classmethod
     def load(cls, path):
-        store = KVStore(path, index_backend=None)
+        store = cls(path, index_backend=None)
         store.load_param()
         return store
 

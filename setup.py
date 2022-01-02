@@ -5,6 +5,6 @@ setup(
       name='no_hassle_kv',
       version='0.0.1',
       py_modules=['no_hassle_kv'],
-      install_requires=[],
+      install_requires=["dill"],
       scripts=[],
 )
