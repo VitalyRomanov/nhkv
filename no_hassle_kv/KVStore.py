@@ -228,7 +228,7 @@ class CompactKeyValueStore:
 
     @classmethod
     def load(cls, path):
-        store = CompactKeyValueStore(path)
+        store = cls(path)
         store.load_param()
         store.load_index()
         return store
