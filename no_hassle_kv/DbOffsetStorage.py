@@ -15,15 +15,21 @@ class DbOffsetStorage:
 
         self.requires_commit = False
 
-    def __setitem__(self, key, value):
+    def add_item(self, key, value, how="REPLACE"):
         if type(key) is not int:
             raise TypeError("Key type should be int but given: ", type(key))
         shard, position, bytes = value
         self.cur.execute(
-            "REPLACE INTO offset_storage (key, shard, position, bytes) VALUES (?,?,?,?)",
+            f"{how} INTO offset_storage (key, shard, position, bytes) VALUES (?,?,?,?)",
             (key, shard, position, bytes)
         )
         self.requires_commit = True
+
+    def __setitem__(self, key, value):
+        self.add_item(key, value, how="REPLACE")
+
+    def append_key(self, key, value):
+        self.add_item(key, value, how="INSERT")
 
     def __getitem__(self, key):
         if self.requires_commit:
