@@ -1,4 +1,4 @@
-# no_hassle_kv
+# No Hassle KV
 
 Library for python native on-disk key-value storage. The use case is primarily directed towards storing large objects.
 
