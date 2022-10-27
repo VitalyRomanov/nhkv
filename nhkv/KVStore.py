@@ -2,12 +2,12 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from no_hassle_kv import DbDict
+from nhkv import DbDict
 import shelve
 import dill as pickle
 
-from no_hassle_kv.DbOffsetStorage import DbOffsetStorage
-from no_hassle_kv.CompactStorage import CompactStorage
+from nhkv.DbOffsetStorage import DbOffsetStorage
+from nhkv.CompactStorage import CompactStorage
 import mmap
 
 
@@ -124,7 +124,7 @@ class CompactKeyValueStore:
     def get_with_id(self, doc_id):
         triplet = self.index[doc_id]
         if triplet is None:
-            raise KeyError("Key not found: ", doc_id)
+            raise KeyError(f"Key not found: {doc_id}")
         shard, pos, len_ = triplet
         if len_ == 0:
             raise ValueError("Entry length is 0")
@@ -263,9 +263,27 @@ class KVStore(CompactKeyValueStore):
             be string.
         """
         super().__init__(
-            path, shard_size, serializer=serializer, deserializer=deserializer, index_backend="sqlite", **kwargs
+            path, shard_size, serializer=serializer, deserializer=deserializer, index_backend=index_backend, **kwargs
         )
         self.check_dir_exists()
+        self._infer_key_type()
+
+    def _infer_key_type(self):
+        if type(self.index) is DbDict:
+            self._key_type = str
+            self._key_type_error_message = "Key type should be `str` when `sqlite` is used for index backend, but {key_type} given."
+        elif type(self.index) is DbOffsetStorage:
+            self._key_type = int
+            self._key_type_error_message = "Key type should be `int` when `sqlite` is used for index backend, but {key_type} given."
+        elif type(self.index) is shelve.DbfilenameShelf:
+            self._key_type = str
+            self._key_type_error_message = "Key type should be `str` when `shelve` is used for index backend, but {key_type} given."
+        else:
+            raise ValueError("Unknown index type")
+
+    def _verify_key_type(self, key_type):
+        if key_type != self._key_type:
+            raise ValueError(self._key_type_error_message.format(key_type=key_type))
 
     def initialize_offset_index(self, index_backend="sqlite", **kwargs):
         if index_backend is None:
@@ -296,17 +314,14 @@ class KVStore(CompactKeyValueStore):
             parent.mkdir()
 
         if index_path.name.endswith(".shelve"):
-            self.index = shelve.open(index_path, protocol=4)
+            self.index = shelve.open(str(index_path.absolute()), protocol=4)
         else:
             self.index = DbOffsetStorage(index_path)
             # self.index = DbDict(index_path)
 
     def __setitem__(self, key, value, key_error='ignore'):
-        if type(self.index) is DbDict:
-            if type(key) is not str:
-                raise TypeError(
-                    f"Key type should be `str` when `sqlite` is used for index backend, but {type(key)} given."
-                )
+        self._verify_key_type(type(key))
+
         # serialized = pickle.dumps(value, protocol=4)
         serialized = self.serialize(value)
 

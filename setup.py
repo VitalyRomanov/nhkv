@@ -2,9 +2,9 @@ from distutils.core import setup
 # from setuptools import setup, find_packages
 
 setup(
-      name='no_hassle_kv',
+      name='nhkv',
       version='0.0.1',
-      py_modules=['no_hassle_kv'],
+      py_modules=['nhkv'],
       install_requires=["dill"],
       scripts=[],
 )

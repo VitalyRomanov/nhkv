@@ -1,6 +1,6 @@
 import sys
 
-from no_hassle_kv import CompactKeyValueStore, DbDict, KVStore
+from nhkv import CompactKeyValueStore, DbDict, KVStore
 import shelve
 import sqlite3
 from sqlitedict import SqliteDict
