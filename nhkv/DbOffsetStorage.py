@@ -5,9 +5,9 @@ class DbOffsetStorage:
     def __init__(self, path):
         self.path = path
 
-        self.db = sqlite3.connect(path)
-        self.cur = self.db.cursor()
-        self.cur.execute("CREATE TABLE IF NOT EXISTS offset_storage ("
+        self._db = sqlite3.connect(path)
+        self._cur = self._db.cursor()
+        self._cur.execute("CREATE TABLE IF NOT EXISTS offset_storage ("
                          "key INTEGER PRIMARY KEY NOT NULL UNIQUE, "
                          "shard INTEGER NOT NULL, "
                          "position INTEGER NOT NULL, "
@@ -19,7 +19,7 @@ class DbOffsetStorage:
         if type(key) is not int:
             raise TypeError("Key type should be int but given: ", type(key))
         shard, position, bytes = value
-        self.cur.execute(
+        self._cur.execute(
             f"{how} INTO offset_storage (key, shard, position, bytes) VALUES (?,?,?,?)",
             (key, shard, position, bytes)
         )
@@ -34,16 +34,16 @@ class DbOffsetStorage:
     def __getitem__(self, key):
         if self.requires_commit:
             self.commit()
-        return self.cur.execute(f"SELECT shard, position, bytes FROM offset_storage WHERE key = ?", (key,)).fetchone()
+        return self._cur.execute(f"SELECT shard, position, bytes FROM offset_storage WHERE key = ?", (key,)).fetchone()
 
     def commit(self):
-        self.db.commit()
+        self._db.commit()
         self.requires_commit = False
 
     def __len__(self):
         if self.requires_commit:
             self.commit()
-        return self.cur.execute("SELECT COUNT() FROM offset_storage").fetchone()[0]
+        return self._cur.execute("SELECT COUNT() FROM offset_storage").fetchone()[0]
 
     def save(self):
         self.commit()
