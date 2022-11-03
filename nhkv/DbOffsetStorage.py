@@ -45,6 +45,10 @@ class DbOffsetStorage:
             self.commit()
         return self._cur.execute("SELECT COUNT() FROM offset_storage").fetchone()[0]
 
+    def keys(self):
+        keys = self._cur.execute("SELECT key FROM offset_storage").fetchall()
+        return list(key[0] for key in keys)
+
     def save(self):
         self.commit()
 

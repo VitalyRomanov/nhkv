@@ -13,6 +13,9 @@ class CompactStorage:
     def __len__(self):
         return self._active_storage_size
 
+    def keys(self):
+        return list(range(len(self._storage) // self._n_fields))
+
     def _create_view(self):
         if self._has_view is False:
             self._view = memoryview(self._storage)

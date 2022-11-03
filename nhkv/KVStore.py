@@ -33,7 +33,7 @@ class CompactKeyValueStore:
             self._serialize = serializer
             self._deserialize = deserializer
         else:
-            self._serialize = lambda value: pickle.dumps(value, protocol=4)
+            self._serialize = lambda value: pickle.dumps(value, protocol=4, fix_imports=False)
             self._deserialize = lambda value: pickle.loads(value)
 
     def _initialize_file_index(self, shard_size, **kwargs):
@@ -103,6 +103,19 @@ class CompactKeyValueStore:
 
     def __len__(self):
         return len(self._index)
+
+    def __contains__(self, item):
+        triplet = self._index[item]
+        if triplet is None:
+            return False
+        return True
+
+    def keys(self):
+        return self._index.keys()
+
+    def items(self):
+        for key in self.keys():
+            yield key, self[key]
 
     def get(self, key, default):
         try:
@@ -226,7 +239,7 @@ class CompactKeyValueStore:
         for shard in self._opened_shards.values():
             for s in shard[::-1]:
                 if s:
-                    s.close()
+                    s.flush()
 
     def close(self):
         self._close_all_shards()

@@ -72,6 +72,10 @@ class DbDict:
     def __len__(self):
         return self._cur.execute("SELECT COUNT() FROM [mydict]").fetchone()[0]
 
+    def keys(self):
+        keys = self._cur.execute("SELECT key FROM [mydict]").fetchall()
+        return list(key[0] for key in keys)
+
     def commit(self):
         self._conn.commit()
 
