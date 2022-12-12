@@ -7,4 +7,5 @@ setup(
       py_modules=['nhkv'],
       install_requires=["dill"],
       scripts=[],
+      packages=['nhkv']
 )
