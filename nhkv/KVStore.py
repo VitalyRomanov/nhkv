@@ -272,20 +272,21 @@ class KVStore(CompactKeyValueStore):
 
     def _infer_key_type(self):
         if type(self._index) is DbDict:
-            self._key_type = str
-            self._key_type_error_message = "Key type should be `str` when `sqlite` is used for index backend, but {key_type} given."
+            raise NotImplementedError()
+            # self._key_type = str
+            # self._key_type_error_message = "Key type should be `str` when `sqlite` is used for index backend, but {key_type} given."
         elif type(self._index) is DbOffsetStorage:
             self._key_type = int
-            self._key_type_error_message = "Key type should be `int` when `sqlite` is used for index backend, but {key_type} given."
+            self._key_type_error_message = "Key type should be `int` when `sqlite` is used for index backend, but `{key_type}` given."
         elif type(self._index) is shelve.DbfilenameShelf:
             self._key_type = str
-            self._key_type_error_message = "Key type should be `str` when `shelve` is used for index backend, but {key_type} given."
+            self._key_type_error_message = "Key type should be `str` when `shelve` is used for index backend, but `{key_type}` given."
         else:
             raise ValueError("Unknown index type")
 
     def _verify_key_type(self, key_type):
         if key_type != self._key_type:
-            raise ValueError(self._key_type_error_message.format(key_type=key_type))
+            raise ValueError(self._key_type_error_message.format(key_type=key_type.__name__))
 
     def _initialize_offset_index(self, index_backend="sqlite", **kwargs):
         if index_backend is None:
@@ -347,9 +348,9 @@ class KVStore(CompactKeyValueStore):
 
     def commit(self):
         super(KVStore, self).commit()
-        if type(self._index) in {DbDict, DbOffsetStorage}:
-            self._index.commit()  # for DbDict index
-        else:
+        if hasattr(self._index, "commit"):
+            self._index.commit()
+        elif hasattr(self._index, "sync"):
             self._index.sync()
 
     @classmethod
