@@ -1,4 +1,5 @@
 import sys
+from collections import OrderedDict
 from pathlib import Path
 from typing import Optional
 
@@ -38,7 +39,7 @@ class CompactKeyValueStore:
 
     def _initialize_file_index(self, shard_size, **kwargs):
         self._file_index = dict()  # (shard, filename)
-        self._opened_shards = dict()  # (shard, file, mmap object) if mmap is none -> opened for write
+        self._opened_shards = OrderedDict()  # (shard, file, mmap object) if mmap is none -> opened for write
         self._shard_for_write = 0
         self._written_in_current_shard = 0
         self._shard_size = shard_size
@@ -153,6 +154,14 @@ class CompactKeyValueStore:
         if not self.path.is_dir():
             self.path.mkdir()
 
+    def _close_some_files_if_too_many_opened(self, id_, max_opened_shards_limit=10):
+        self._opened_shards.move_to_end(id_, last=True)
+        if len(self._opened_shards) >= max_opened_shards_limit:
+            _, shard = self._opened_shards.popitem(last=False)
+            if shard[1] is not None:
+                shard[1].close()
+            shard[0].close()
+
     def _writing_mode(self, id_):
         if id_ not in self._opened_shards:
             if id_ not in self._file_index:
@@ -162,6 +171,8 @@ class CompactKeyValueStore:
             self._opened_shards[id_][1].close()
             self._opened_shards[id_][0].close()
             self._opened_shards[id_] = self._open_for_write(self._file_index[id_])
+
+        self._close_some_files_if_too_many_opened(id_)
         return self._opened_shards[id_]
 
     def _reading_mode(self, id_):
@@ -172,6 +183,8 @@ class CompactKeyValueStore:
         elif self._opened_shards[id_][1] is None:
             self._opened_shards[id_][0].close()
             self._opened_shards[id_] = self._open_for_read(self._file_index[id_])
+
+        self._close_some_files_if_too_many_opened(id_)
         return self._opened_shards[id_]
 
     @property
