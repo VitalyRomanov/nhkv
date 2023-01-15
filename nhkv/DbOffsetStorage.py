@@ -14,6 +14,7 @@ class DbOffsetStorage:
                          "bytes INTEGER NOT NULL)")
 
         self.requires_commit = False
+        self.added_without_commit = 0
 
     def add_item(self, key, value, how="REPLACE"):
         if type(key) is not int:
@@ -24,6 +25,9 @@ class DbOffsetStorage:
             (key, shard, position, bytes)
         )
         self.requires_commit = True
+        self.added_without_commit += 1
+        if self.added_without_commit > 100000:
+            self.commit()
 
     def __setitem__(self, key, value):
         self.add_item(key, value, how="REPLACE")
@@ -39,6 +43,7 @@ class DbOffsetStorage:
     def commit(self):
         self._db.commit()
         self.requires_commit = False
+        self.added_without_commit = 0
 
     def __len__(self):
         if self.requires_commit:
