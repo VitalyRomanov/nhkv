@@ -283,7 +283,7 @@ class CompactKeyValueStore:
         return len(self._index)
 
     def __del__(self):
-        self.save()
+        self.close()
 
     def keys(self):
         """
@@ -384,19 +384,25 @@ class KVStore(CompactKeyValueStore):
             index_backend = self._infer_backend()
         self._create_index(self._get_index_path(index_backend))
 
+    def _get_shelve_index_path(self):
+        return self.path.joinpath("store_index.shelve")
+
+    def _get_sqlite_index_path(self):
+        return self.path.joinpath("store_index.s3db")
+
     def _infer_backend(self):
-        if self.path.joinpath("store_index.shelve.db").is_file():
+        if self._get_shelve_index_path().is_file():
             return "shelve"
-        elif self.path.joinpath("store_index.s3db").is_file():
+        elif self._get_sqlite_index_path().is_file():
             return "sqlite"
         else:
             raise FileNotFoundError("No index file found.")
 
     def _get_index_path(self, index_backend):
         if index_backend == "shelve":
-            index_path = self.path.joinpath("store_index.shelve")
+            index_path = self._get_shelve_index_path()
         elif index_backend == "sqlite":
-            index_path = self.path.joinpath("store_index.s3db")
+            index_path = self._get_sqlite_index_path()
         else:
             raise ValueError(f"`index_backend` should be `shelve` or `sqlite`, but `{index_backend}` is provided.")
         return index_path
