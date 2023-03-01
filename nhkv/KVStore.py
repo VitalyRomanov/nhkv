@@ -1,7 +1,8 @@
+import logging
 import sys
 from collections import OrderedDict
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from nhkv import DbDict
 import shelve
@@ -18,7 +19,7 @@ class CompactKeyValueStore:
     are stored in mmap file. Values are sharded into separate files.
     """
     _file_index = None
-    _index = None
+    _index: CompactStorage = None
     _key_map = None
     _is_open = False
 
@@ -54,9 +55,16 @@ class CompactKeyValueStore:
         if serializer is not None and deserializer is not None:
             self._serialize = serializer
             self._deserialize = deserializer
-        else:
-            self._serialize = lambda value: pickle.dumps(value, protocol=4, fix_imports=False)
-            self._deserialize = lambda value: pickle.loads(value)
+            return
+
+        if (
+                serializer is not None and deserializer is None or
+                serializer is None and deserializer is not None
+        ):
+            logging.warning("Both, serializer and deserializer should be specified. Fallback to pickle.")
+
+        self._serialize = lambda value: pickle.dumps(value, protocol=4, fix_imports=False)
+        self._deserialize = lambda value: pickle.loads(value)
 
     def _initialize_file_index(self, shard_size, **kwargs):
         """
@@ -115,8 +123,7 @@ class CompactKeyValueStore:
         return f, None
 
     def _check_dir_exists(self):
-        if not self.path.is_dir():
-            self.path.mkdir()
+        self.path.mkdir(exist_ok=True, parents=True)
 
     def _close_some_files_if_too_many_opened(self, id_, max_opened_shards_limit=10):
         self._opened_shards.move_to_end(id_, last=True)
@@ -339,6 +346,9 @@ class CompactKeyValueStore:
 
 
 class KVStore(CompactKeyValueStore):
+
+    _index: Union[DbOffsetStorage, shelve.Shelf] = None
+
     def __init__(
             self, path, shard_size=2 ** 30, serializer=None, deserializer=None,
             index_backend: Optional[str] = "sqlite", **kwargs
@@ -382,39 +392,56 @@ class KVStore(CompactKeyValueStore):
     def _initialize_offset_index(self, index_backend="sqlite", **kwargs):
         if index_backend is None:
             index_backend = self._infer_backend()
-        self._create_index(self._get_index_path(index_backend))
+        self._index_backend = index_backend
+        self._create_index()
 
-    def _get_shelve_index_path(self):
-        return self.path.joinpath("store_index.shelve")
+    def _get_shelve_index_path(self, with_siffix=False):
+        db_name = "shelve_index"
+        initial_name = self.path.joinpath(db_name)
+        if not with_siffix:
+            return initial_name
+
+        dir_ = initial_name.parent
+        if not dir_.is_dir():
+            return initial_name
+        for item in dir_.iterdir():
+            if item.name.startswith(db_name):
+                return item
+        else:
+            return initial_name
 
     def _get_sqlite_index_path(self):
-        return self.path.joinpath("store_index.s3db")
+        return self.path.joinpath("sqlite_index.db")
 
     def _infer_backend(self):
-        if self._get_shelve_index_path().is_file():
+        if self._get_shelve_index_path(with_siffix=True).is_file():
             return "shelve"
         elif self._get_sqlite_index_path().is_file():
             return "sqlite"
         else:
             raise FileNotFoundError("No index file found.")
 
-    def _get_index_path(self, index_backend):
-        if index_backend == "shelve":
+    def _get_index_path(self):
+        if self._index_backend == "shelve":
             index_path = self._get_shelve_index_path()
-        elif index_backend == "sqlite":
+        elif self._index_backend == "sqlite":
             index_path = self._get_sqlite_index_path()
         else:
-            raise ValueError(f"`index_backend` should be `shelve` or `sqlite`, but `{index_backend}` is provided.")
+            raise ValueError(
+                f"`index_backend` should be `shelve` or `sqlite`, but `{self._index_backend}` is provided."
+            )
         return index_path
 
-    def _create_index(self, index_path):
+    def _create_index(self):
+        index_path = self._get_index_path()
+        index_path.parent.mkdir(exist_ok=True, parents=True)
 
-        index_path.parent.mkdir(exist_ok=True)
-
-        if index_path.name.endswith(".shelve"):
+        if self._index_backend == "shelve":
             self._index = shelve.open(str(index_path.absolute()), protocol=4)
-        else:
+        elif self._index_backend == "sqlite":
             self._index = DbOffsetStorage(index_path)
+        else:
+            raise ValueError("Unknown index backend")
             # self._index = DbDict(index_path)
 
     def _save_index(self):
@@ -422,10 +449,12 @@ class KVStore(CompactKeyValueStore):
         Flush data to disk
         :return:
         """
-        if hasattr(self._index, "commit"):  # sqlite backend
-            self._index.commit()
-        elif hasattr(self._index, "sync"):  # shelve backend
+        if self._index_backend == "shelve":
             self._index.sync()
+        elif self._index_backend == "sqlite":
+            self._index.save()
+        else:
+            raise Exception("Something went wrong")
 
     def _load_index(self):
         pass

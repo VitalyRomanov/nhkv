@@ -89,5 +89,3 @@ class CompactStorage:
     @classmethod
     def load(cls, path):
         return pickle.load(open(path, "rb"))
-
-

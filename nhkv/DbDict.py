@@ -81,8 +81,6 @@ class DbDict:
 
         return pickle.loads(bytes(val))
 
-
-
     def __delitem__(self, key):
         try:
             self._conn.execute("DELETE FROM [mydict] WHERE key = ?", (key,))
@@ -114,5 +112,3 @@ class DbDict:
             self._cur.close()
             self._conn.close()
             self._is_open = False
-
-

@@ -46,6 +46,47 @@ def test_compact_storage():
     os.remove("test_save.pkl")
 
 
+def test_db_offset_storage():
+    from nhkv.DbOffsetStorage import DbOffsetStorage
+
+    db_path = "db_offset_storage.db"
+    storage = DbOffsetStorage(db_path)
+    storage[0] = (1, 2, 3)
+    storage[1] = (4, 5, 6)
+    storage[10] = (4, 5, 6)
+    storage.save()
+
+    assert storage[0] == (1, 2, 3)
+    assert storage[1] == (4, 5, 6)
+
+    try:
+        temp = storage[2]
+        assert False, "Exception is not caught"
+    except KeyError:
+        pass
+
+    assert len(storage) == 3
+
+    storage[1] = (5, 5, 6)
+
+    assert storage.get(2, 3) == 3
+
+    assert len(storage) == 3
+
+    assert storage.keys() == [0, 1, 10]
+
+    try:
+        storage["cat"] = 5
+        assert False, "Exception is not caught"
+    except TypeError:
+        pass
+
+    del storage
+
+    import os
+    os.remove(db_path)
+
+
 def test_db_dict():
     from nhkv.DbDict import DbDict
     import os
@@ -158,9 +199,10 @@ def test_kv_store_sqlite():
     from pathlib import Path
     from nhkv.KVStore import KVStore
 
-    assert Path("temp").is_dir() is False
+    path = "temp_sqlite"
+    assert Path(path).is_dir() is False
 
-    storage = KVStore("temp", index_backend="sqlite")
+    storage = KVStore(path, index_backend="sqlite")
     storage[0] = 1
     storage[10] = ["nice"] * 10
     storage[10] = ["nice"] * 5
@@ -193,7 +235,7 @@ def test_kv_store_sqlite():
     storage.close()
     del storage
 
-    storage = KVStore.load("temp")
+    storage = KVStore.load(path)
     assert len(storage) == 3
     assert storage.keys() == [0, 10, 12]
     assert storage[10] == ["size"] * 5
@@ -202,16 +244,18 @@ def test_kv_store_sqlite():
     del storage
 
     import shutil
-    shutil.rmtree("temp")
+    shutil.rmtree(path)
 
 
 def test_kv_store_shelve():
     from pathlib import Path
     from nhkv.KVStore import KVStore
 
-    assert Path("temp").is_dir() is False
+    path = "temp_shelve"
 
-    storage = KVStore("temp", index_backend="shelve")
+    assert Path(path).is_dir() is False
+
+    storage = KVStore(path, index_backend="shelve")
     storage["0"] = 1
     storage["10"] = ["nice"] * 10
     storage["10"] = ["nice"] * 5
@@ -238,17 +282,13 @@ def test_kv_store_shelve():
     assert len(storage) == 2
     assert storage.keys() == ["0", "10"]
 
-    storage._flush_shards()
+    # storage._flush_shards()
     storage.save()
     storage["12"] = "tonight"
     storage.close()
     del storage
 
-    path = Path("temp")
-    print(list(path.iterdir()))
-    print(path.absolute())
-
-    storage = KVStore.load("temp")
+    storage = KVStore.load(path)
     assert len(storage) == 3
     assert storage.keys() == ["0", "10", "12"]
     assert storage["10"] == ["size"] * 5
@@ -257,4 +297,4 @@ def test_kv_store_shelve():
     del storage
 
     import shutil
-    shutil.rmtree("temp")
+    shutil.rmtree(path)

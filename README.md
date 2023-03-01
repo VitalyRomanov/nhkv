@@ -1,46 +1,98 @@
-# NHKV (no hassle KV)
+![](https://github.com/VitalyRomanov/nhkv/actions/workflows/run-tests.yaml/badge.svg)
 
-Library for on-disk key-value storage written in Python. The use case is primarily directed towards storing large objects.
+# NHKV
 
-## Requirements
-
-Key-value store relies on Python's Shelve (or sqlite3) and mmap modules. 
-
-## Alternatives
-
-NHKV is closely related to libraries such as 
-1. Shelve - has non-zero probability of key collision
-2. Sqlitedict - slower reads
-3. Shove - requires configuration of the backend storage
-
-DbDict, CompactStorage and KVStore are implemented in this library. DbDict is a wrapper for Sqlite3 database. CompactStorage and KVStore use mmap file for storing data. CompactStore uses numpy arrays to store mmap offsets in memory. KVStore stores index in sqlite or shelve database. 
-
-![](https://www.dropbox.com/s/zp9pccodzfq6yy4/write_time_vs_data_size.png?dl=1)
-![](https://www.dropbox.com/s/c3clm9h3kibzkaj/write_time_vs_string_length.png?dl=1)
-![](https://www.dropbox.com/s/gy7c8mb684j3zqt/read_time_vs_data_size.png?dl=1)
-![](https://www.dropbox.com/s/1tss4xl6djyffjg/read_time_vs_string_length.png?dl=1)
+NHKV (no hassle key-value) is a library for on-disk key-value storage. The use case is primarily directed towards storing large objects. The goal was to make it lightweight and without external dependencies. Was created primarily for storing datasets for machine learning.
 
 ## Installation
 
 ```bash
-pip install git+https://github.com/VitalyRomanov/nhkv.git
+pip install nhrv
 ```
 
-## Usage
+## Quick Start
+
+```python
+from nhkv import KVStore
+storage = KVStore("path/to/storage/location")  # a folder is created
+
+key = 0
+value = "python serializable object"
+storage[key] = value
+storage.save()
+```
+
+## Available Storage Classes
+
+### DbDict
+Data is stored in Sqlite3 database. THe idea id similar to `SqliteDict`. Functionality of `DbDict` is inferior to `SqliteDict`, but overhead is also smaller. 
+
+```python
+from nhkv import DbDict
+
+storage = DbDict("path/to/storage/location", key_type=str)  # a database file is created
+# can also use int keys
+storage["string key"] = "python serializable object"
+storage.save()  # database transaction is not completed until saved explicitly
+# frequent saving affects performance
+```
+
+### CompactKeyValueStore
+The data is kept in mmap file. The index is kept in memory, can become very large if many objects are stored. Mmap files are split in shards.  
+
+```python
+from nhkv import CompactKeyValueStore
+
+storage = CompactKeyValueStore(
+    "path/to/storage/location",  # folder is created
+    serializer=lambda string_: string_.encode("utf8"),  # optional serializer
+    deserializer=lambda bytes_: bytes_.decode("utf8"),  # optional deserializer
+    shard_size=1048576  # optional shard size in bytes
+)  
+# key is any type that can be used with `dict`
+storage["string key"] = "python serializable object"
+storage.save()  # save to ensure transaction is complete
+# frequent saving affects performance
+storage.close()
+
+storage = CompactKeyValueStore.load("path/to/storage/location")
+```
+
+### KVStore
+The data is kept in mmap file. The index is kept either in sqlite or shelve database.  
 
 ```python
 from nhkv import KVStore
 
-storage_path = "~/storage"
+storage = KVStore(
+    "path/to/storage/location",  # folder is created
+    index_backend='sqlite',  # possible options: sqlite | shelve 
+    serializer=lambda string_: string_.encode("utf8"),  # optional serializer
+    deserializer=lambda bytes_: bytes_.decode("utf8"),  # optional deserializer
+    shard_size=1048576  # optional shard size in bytes
+)  
+# sqlite uses int keys
+# shelve uses str keys
+storage[100] = "python serializable object"
+storage.save()  # save to ensure transaction is complete
+# frequent saving affects performance
+storage.close()
 
-...
-
-kv_store = KVStore(storage_path, shard_size=2**30, index_backend="sqlite")
-kv_store["string_key"] = large_object
-
-same_object = kv_store["string_key"]
+storage = KVStore.load("path/to/storage/location")
 ```
+
+## Alternatives
+
+NHKV is closely related to libraries such as 
+1. `Shelve` - has non-zero probability of key collision, very slow
+2. `SqliteDict` - slower reads and writes, but more functionality (eg. multiprocessing)
+3. `DiskCache` - slower reads and writes, but more functionality (eg. cache features)
+
+![](https://www.dropbox.com/s/v8cr3o64x8tohp6/write_time_vs_dataset_size.png?dl=1)
+![](https://www.dropbox.com/s/ukcnbgymj49szhd/write_time_vs_entry_size.png?dl=1)
+![](https://www.dropbox.com/s/ch2j0ilijoexa3p/read_time_vs_dataset_size.png?dl=1)
+![](https://www.dropbox.com/s/n573ab0r9luaf0v/read_time_vs_entry_size.png?dl=1)
 
 ## Limitation
 
-Class KVStore is better suited for the batch writes and consecutive batch reads. Alternating many reads and writes will result in more frequent `commit` calls for sqlite backend and will degrade the performance.
+Storage classes in this library are better suited for the batch writes and consecutive batch reads. This represents the intended use case: storing datasets for machine learning. Alternating many reads and writes will result in reduced performance.

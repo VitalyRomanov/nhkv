@@ -4,8 +4,15 @@ import time
 from nhkv import CompactKeyValueStore, DbDict, KVStore
 import shelve
 import sqlite3
-from sqlitedict import SqliteDict
-import pandas as pd
+
+
+try:
+    from sqlitedict import SqliteDict
+    from diskcache import Index
+    import pandas as pd
+except ImportError:
+    print("Install extra packages: pip install pandas sqlitedict diskcache")
+    sys.exit()
 
 
 def test_sqlite3_write(texts, datasize, str_len):
@@ -63,6 +70,12 @@ def test_diskkvstore_write(texts, datasize, str_len):
     d.save()
 
 
+def test_diskcache_write(texts, datasize, str_len):
+    d = Index(f"diskcache_{datasize}_{str_len}")
+    for i, line in enumerate(texts):
+        d[i] = line
+
+
 def test_sqlite3_read(texts, datasize, str_len):
     conn = sqlite3.connect(f"sqlite_{datasize}_{str_len}.s3db")
     cur = conn.cursor()
@@ -114,6 +127,13 @@ def test_diskkvstore_read(texts, datasize, str_len):
     d.close()
 
 
+def test_diskcache_read(texts, datasize, str_len):
+    d = Index(f"diskcache_{datasize}_{str_len}")
+    for i, text in enumerate(texts):
+        a = d[i]
+        assert a == text
+
+
 class TextReader:
     def __init__(self, path, limit_length=None, datasize=None):
         self.file_path = path
@@ -152,7 +172,8 @@ writes = {
     "sqlitedict": [],
     "DbDict": [],
     "CompactKVStore": [],
-    "KVStore": []
+    "KVStore": [],
+    "DiskCache": []
 }
 
 prev_len = None
@@ -214,6 +235,13 @@ for str_len in [10, 100, 1000, 3000, 6000, 10000]:
         writes["KVStore"].append(end_time - start_time)
         # writes.append({"Type": "KVStore", "datasize": datasize, "time": end_time - start_time})
 
+        start_time = time.time()
+        test_diskcache_write(texts, texts.line_count, texts.average_len)
+        end_time = time.time()
+        print("--- %s seconds ---" % (end_time - start_time))
+        writes["DiskCache"].append(end_time - start_time)
+        # writes.append({"Type": "KVStore", "datasize": datasize, "time": end_time - start_time})
+
 writes = pd.DataFrame.from_dict(writes)
 # writes = writes.set_index("index")
 writes.to_csv("writes.csv")
@@ -226,7 +254,8 @@ reads = {
     "sqlitedict": [],
     "DbDict": [],
     "CompactKVStore": [],
-    "KVStore": []
+    "KVStore": [],
+    "DiskCache": []
 }
 
 prev_len = None
@@ -287,6 +316,13 @@ for str_len in [10, 100, 1000, 3000, 6000, 10000]:
         reads["KVStore"].append(end_time - start_time)
         # reads.append({"Type": "KVStore", "datasize": datasize, "time": end_time - start_time})
 
+        start_time = time.time()
+        test_diskcache_read(texts, texts.line_count, texts.average_len)
+        end_time = time.time()
+        print("--- %s seconds ---" % (end_time - start_time))
+        reads["DiskCache"].append(end_time - start_time)
+        # reads.append({"Type": "KVStore", "datasize": datasize, "time": end_time - start_time})
+
 reads = pd.DataFrame.from_dict(reads)
 # reads = reads.set_index("index")
 reads.to_csv("reads.csv")
@@ -295,42 +331,42 @@ import matplotlib.pyplot as plt
 
 writes = pd.read_csv("writes.csv")
 writes_data_size = writes.query("`data size` == 100001")
-plt.plot(writes_data_size["avg len"], writes_data_size[["sqlite3", "sqlitedict", "DbDict", "CompactKVStore", "KVStore"]])
-plt.legend(["Sqlite3", "SqliteDict", "DbDict", "CompactStorage", "KVStore"])
+plt.plot(writes_data_size["avg len"], writes_data_size[["sqlite3", "sqlitedict", "DbDict", "CompactKVStore", "KVStore", "DiskCache"]])
+plt.legend(["Sqlite3", "SqliteDict", "DbDict", "CompactStorage", "KVStore", "DiskCache"])
 plt.xlabel("Average string length")
 plt.ylabel("Time required, s")
 plt.gca().set_xscale("log")
 plt.title("Write time vs entry size")
-plt.savefig("write_time_vs_string_length.png")
+plt.savefig("write_time_vs_entry_size.png")
 plt.close()
 
 writes_avg_len = writes.query("`avg len` > 100 and `avg len` < 2000")
-plt.plot(writes_avg_len["data size"], writes_avg_len[["sqlite3", "sqlitedict", "DbDict", "CompactKVStore", "KVStore"]])
-plt.legend(["Sqlite3", "SqliteDict", "DbDict", "CompactStorage", "KVStore"])
+plt.plot(writes_avg_len["data size"], writes_avg_len[["sqlite3", "sqlitedict", "DbDict", "CompactKVStore", "KVStore", "DiskCache"]])
+plt.legend(["Sqlite3", "SqliteDict", "DbDict", "CompactStorage", "KVStore", "DiskCache"])
 plt.xlabel("Number of entries")
 plt.ylabel("Time required, s")
 # plt.gca().set_xscale("log")
 plt.title("Write time vs dataset size")
-plt.savefig("write_time_vs_data_size.png")
+plt.savefig("write_time_vs_dataset_size.png")
 plt.close()
 
 reads = pd.read_csv("reads.csv")
 reads_data_size = reads.query("`data size` == 100001")
-plt.plot(reads_data_size["avg len"], reads_data_size[["sqlite3", "sqlitedict", "DbDict", "CompactKVStore", "KVStore"]])
-plt.legend(["Sqlite3", "SqliteDict", "DbDict", "CompactKVStore", "KVStore"])
+plt.plot(reads_data_size["avg len"], reads_data_size[["sqlite3", "sqlitedict", "DbDict", "CompactKVStore", "KVStore", "DiskCache"]])
+plt.legend(["Sqlite3", "SqliteDict", "DbDict", "CompactKVStore", "KVStore", "DiskCache"])
 plt.xlabel("Average string length")
 plt.ylabel("Time required, s")
 plt.gca().set_xscale("log")
 plt.title("Read time vs entry size")
-plt.savefig("read_time_vs_string_length.png")
+plt.savefig("read_time_vs_entry_size.png")
 plt.close()
 
 reads_avg_len = reads.query("`avg len` > 100 and `avg len` < 2000")
-plt.plot(reads_avg_len["data size"], reads_avg_len[["sqlite3", "sqlitedict", "DbDict", "CompactKVStore", "KVStore"]])
-plt.legend(["Sqlite3", "SqliteDict", "DbDict", "CompactKVStore", "KVStore"])
+plt.plot(reads_avg_len["data size"], reads_avg_len[["sqlite3", "sqlitedict", "DbDict", "CompactKVStore", "KVStore", "DiskCache"]])
+plt.legend(["Sqlite3", "SqliteDict", "DbDict", "CompactKVStore", "KVStore", "DiskCache"])
 plt.xlabel("Number of entries")
 plt.ylabel("Time required, s")
 plt.title("Read time vs dataset size")
 # plt.gca().set_xscale("log")
-plt.savefig("read_time_vs_data_size.png")
+plt.savefig("read_time_vs_dataset_size.png")
 plt.close()
