@@ -290,7 +290,8 @@ class CompactKeyValueStore:
         return len(self._index)
 
     def __del__(self):
-        self.close()
+        pass  # throws exception on shutdown
+        # self.close()
 
     def keys(self):
         """
