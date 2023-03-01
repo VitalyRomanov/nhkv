@@ -88,10 +88,13 @@ NHKV is closely related to libraries such as
 2. `SqliteDict` - slower reads and writes, but more functionality (eg. multiprocessing)
 3. `DiskCache` - slower reads and writes, but more functionality (eg. cache features)
 
-![](https://www.dropbox.com/s/v8cr3o64x8tohp6/write_time_vs_dataset_size.png?dl=1)
-![](https://www.dropbox.com/s/ukcnbgymj49szhd/write_time_vs_entry_size.png?dl=1)
-![](https://www.dropbox.com/s/ch2j0ilijoexa3p/read_time_vs_dataset_size.png?dl=1)
-![](https://www.dropbox.com/s/n573ab0r9luaf0v/read_time_vs_entry_size.png?dl=1)
+![Write Time vs Dataset Size](https://i.imgur.com/uxLIdRg.png)
+
+![Write Time vs Entry Size](https://i.imgur.com/1b1HPtX.png)
+
+![Read Time vs Dataset Size](https://i.imgur.com/K8q9nfK.png)
+
+![Read Time vs Entry Size](https://i.imgur.com/wHTQ0Kt.png)
 
 ## Limitation
 
