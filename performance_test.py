@@ -49,7 +49,7 @@ def test_kvstore_write(texts, datasize, str_len):
     d = CompactKeyValueStore(f"compactkv_{datasize}_{str_len}.kv")
     for i, line in enumerate(texts):
         d[i] = line
-    d.commit()
+    d._flush_shards()
     d.close()
     d.save()
 
@@ -58,7 +58,7 @@ def test_diskkvstore_write(texts, datasize, str_len):
     d = KVStore(f"kvstore_{datasize}_{str_len}.diskkv")
     for i, line in enumerate(texts):
         d[i] = line
-    d.commit()
+    d._flush_shards()
     d.close()
     d.save()
 

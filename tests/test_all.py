@@ -187,7 +187,7 @@ def test_kv_store_sqlite():
     assert len(storage) == 2
     assert storage.keys() == [0, 10]
 
-    storage.commit()
+    storage._flush_shards()
     storage.save()
     storage[12] = "tonight"
     storage.close()
@@ -238,11 +238,15 @@ def test_kv_store_shelve():
     assert len(storage) == 2
     assert storage.keys() == ["0", "10"]
 
-    storage.commit()
+    storage._flush_shards()
     storage.save()
     storage["12"] = "tonight"
     storage.close()
     del storage
+
+    path = Path("temp")
+    print(list(path.iterdir()))
+    print(path.absolute())
 
     storage = KVStore.load("temp")
     assert len(storage) == 3

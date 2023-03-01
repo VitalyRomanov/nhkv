@@ -14,12 +14,13 @@ import mmap
 
 class CompactKeyValueStore:
     """
-    CompactKeyValueStore is a class that can be used as a key-value storage. Offset index is kept in memory. Values are stored in mmap file.
-    Values are sharded into separate files.
+    CompactKeyValueStore is a class that can be used as a key-value storage. Offset index is kept in memory. Values
+    are stored in mmap file. Values are sharded into separate files.
     """
     _file_index = None
     _index = None
     _key_map = None
+    _is_open = False
 
     _opened_shards = None
     _shard_for_write = 0
@@ -41,6 +42,8 @@ class CompactKeyValueStore:
         self._init_serializers(serializer, deserializer)
         self._initialize_file_index(shard_size, **kwargs)
         self._initialize_offset_index(**kwargs)
+
+        self._is_open = True
 
     def _init_serializers(self, serializer, deserializer):
         """
@@ -79,115 +82,11 @@ class CompactKeyValueStore:
     def _init_storage(self, size):
         self._index._active_storage_size = size
 
-    def __setitem__(self, key, value):
-        """
-        :param key: Keys should be integers
-        :param value:
-        :return:
-        """
-        if self._key_map is not None:
-            if key in self._key_map:
-                key_: Optional[int] = self._key_map[key]
-            else:
-                key_ = None
-        else:
-            if not isinstance(key, int):
-                raise ValueError("Keys should be integers when no key map is available")
-            key_: Optional[int] = key
-
-        serialized = self._serialize(value)
-
-        if key_ is not None:
-            try:
-                # check if there is an entry with such key
-                existing_shard, existing_pos, existing_len = self._index[key_]
-            except IndexError:
-                pass
-            else:
-                if len(serialized) == existing_len:
-                    # successfully retrieved existing position and can overwrite old data
-                    _, mm = self._reading_mode(existing_shard)
-                    mm[existing_pos: existing_pos + existing_len] = serialized
-                    return
-
-        # the key is new or the data size is different
-        f, _ = self._writing_mode(self._shard_for_write)
-        position = f.tell()
-        written = f.write(serialized)
-        to_index = (self._shard_for_write, position, written)
-        if key_ is None or key_ == len(self._index):
-            index_key = self._index.append(to_index)
-            if self._key_map is not None:
-                self._key_map[key] = index_key
-        else:
-            self._index[key_] = to_index
-
-        self._increment_byte_count(written)
-
     def _increment_byte_count(self, written):
         self._written_in_current_shard += written
         if self._written_in_current_shard >= self._shard_size:
             self._shard_for_write += 1
             self._written_in_current_shard = 0
-
-    def __getitem__(self, key):
-        """
-        Get value from key.
-        :param key:
-        :return:
-        """
-        if self._key_map is not None:
-            if key not in self._key_map:
-                raise KeyError("Key does not exist:", key)
-            key_ = self._key_map[key]
-        else:
-            key_ = key
-            if key_ >= len(self._index):
-                raise KeyError("Key does not exist:", key)
-        try:
-            return self._get_with_id(key_)
-        except ValueError:
-            raise KeyError("Key does not exist:", key)
-
-    def __len__(self):
-        return len(self._index)
-
-    def __contains__(self, item):
-        raise NotImplementedError("This operation is too expensive. Use `get` instead.")
-        # triplet = self._index[item]
-        # if triplet is None:
-        #     return False
-        # return True
-
-    def keys(self):
-        """
-        Get list of keys
-        :return:
-        """
-        if self._key_map is not None:
-            return list(self._key_map.keys())
-        else:
-            return list(range(len(self)))
-
-    def items(self):
-        """
-        Returns generator for key-value pairs
-        :return:
-        """
-        for key in self.keys():
-            yield key, self[key]
-
-    def get(self, key, default):
-        """
-        Get value by key and return default if key does not exist.
-        :param key:
-        :param default:
-        :return:
-        """
-        try:
-            return self[key]
-        except KeyError:
-            return default
 
     def _get_with_id(self, key):
         triplet = self._index[key]
@@ -198,9 +97,9 @@ class CompactKeyValueStore:
             raise ValueError("Entry length is 0")
         _, mm = self._reading_mode(shard)
         return self._deserialize(mm[pos: pos + len_])
-        # return pickle.loads(mm[pos: pos+len_])
 
-    def _get_name_format(self, id_):
+    @staticmethod
+    def _get_name_format(id_):
         return 'store_shard_{0:04d}'.format(id_)
 
     def _open_for_read(self, name):
@@ -256,12 +155,9 @@ class CompactKeyValueStore:
     def _runtime_version(self):
         return f"python_{sys.version_info.major}.{sys.version_info.minor}"
 
-    def _get_class_name(self):
-        return self.__class__.__name__
-
     @property
     def _class_name(self):
-        return self._get_class_name()
+        return self.__class__.__name__
 
     @staticmethod
     def _get_variables_for_saving():
@@ -276,13 +172,13 @@ class CompactKeyValueStore:
             "_key_map"
         ]
 
-    def save_param(self):
+    def _save_param(self):
         pickle.dump(
             [getattr(self, v) for v in self._get_variables_for_saving()],
             open(self.path.joinpath("store_params"), "wb"), protocol=4
         )
 
-    def load_param(self):
+    def _load_param(self):
         params = pickle.load(open(self.path.joinpath("store_params"), "rb"))
         variable_names = self._get_variables_for_saving()
 
@@ -301,39 +197,145 @@ class CompactKeyValueStore:
     def _load_index(self):
         self._index = CompactStorage.load(self.path.joinpath("store_index"))
 
-    def __del__(self):
-        self.save()
-
-    def save(self):
-        """
-        Save all required information for loading later from disk.
-        :return:
-        """
-        self.commit()
-        self._save_index()
-        self.save_param()
-
-    @classmethod
-    def load(cls, path):
-        store = cls(path)
-        store.load_param()
-        store._load_index()
-        return store
-
     def _close_all_shards(self):
         for shard in self._opened_shards.values():
             for s in shard[::-1]:
                 if s:
                     s.flush()
 
-    def close(self):
-        self.save()
-        self._close_all_shards()
-
-    def commit(self):
+    def _flush_shards(self):
         for shard in self._opened_shards.values():
             if shard[1] is not None:
                 shard[1].flush()
+
+    def __contains__(self, item):
+        raise NotImplementedError("This operation is too expensive. Use `get` instead.")
+        # triplet = self._index[item]
+        # if triplet is None:
+        #     return False
+        # return True
+
+    def __setitem__(self, key, value):
+        """
+        :param key: Keys should be integers
+        :param value:
+        :return:
+        """
+        if self._key_map is not None:
+            if key in self._key_map:
+                key_: Optional[int] = self._key_map[key]
+            else:
+                key_ = None
+        else:
+            if not isinstance(key, int):
+                raise ValueError("Keys should be integers when no key map is available")
+            key_: Optional[int] = key
+
+        serialized = self._serialize(value)
+
+        if key_ is not None:
+            try:
+                # check if there is an entry with such key
+                existing_shard, existing_pos, existing_len = self._index[key_]
+            except IndexError:
+                pass
+            else:
+                if len(serialized) == existing_len:
+                    # successfully retrieved existing position and can overwrite old data
+                    _, mm = self._reading_mode(existing_shard)
+                    mm[existing_pos: existing_pos + existing_len] = serialized
+                    return
+
+        # the key is new or the data size is different
+        f, _ = self._writing_mode(self._shard_for_write)
+        position = f.tell()
+        written = f.write(serialized)
+        to_index = (self._shard_for_write, position, written)
+        if key_ is None or key_ == len(self._index):
+            index_key = self._index.append(to_index)
+            if self._key_map is not None:
+                self._key_map[key] = index_key
+        else:
+            self._index[key_] = to_index
+
+        self._increment_byte_count(written)
+
+    def __getitem__(self, key):
+        """
+        Get value from key.
+        :param key:
+        :return:
+        """
+        if self._key_map is not None:
+            if key not in self._key_map:
+                raise KeyError("Key does not exist:", key)
+            key_ = self._key_map[key]
+        else:
+            key_ = key
+            if key_ >= len(self._index):
+                raise KeyError("Key does not exist:", key)
+        try:
+            return self._get_with_id(key_)
+        except ValueError:
+            raise KeyError("Key does not exist:", key)
+
+    def __len__(self):
+        return len(self._index)
+
+    def __del__(self):
+        self.save()
+
+    def keys(self):
+        """
+        Get list of keys
+        :return:
+        """
+        if self._key_map is not None:
+            return list(self._key_map.keys())
+        else:
+            return list(range(len(self)))
+
+    def items(self):
+        """
+        Returns generator for key-value pairs
+        :return:
+        """
+        for key in self.keys():
+            yield key, self[key]
+
+    def get(self, key, default):
+        """
+        Get value by key and return default if key does not exist.
+        :param key:
+        :param default:
+        :return:
+        """
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def save(self):
+        """
+        Save all required information for loading later from disk.
+        :return:
+        """
+        self._flush_shards()
+        self._save_index()
+        self._save_param()
+
+    @classmethod
+    def load(cls, path):
+        store = cls(path)
+        store._load_param()
+        store._load_index()
+        return store
+
+    def close(self):
+        if self._is_open:
+            self.save()
+            self._close_all_shards()
+            self._is_open = False
 
 
 class KVStore(CompactKeyValueStore):
@@ -409,6 +411,19 @@ class KVStore(CompactKeyValueStore):
             self._index = DbOffsetStorage(index_path)
             # self._index = DbDict(index_path)
 
+    def _save_index(self):
+        """
+        Flush data to disk
+        :return:
+        """
+        if hasattr(self._index, "commit"):  # sqlite backend
+            self._index.commit()
+        elif hasattr(self._index, "sync"):  # shelve backend
+            self._index.sync()
+
+    def _load_index(self):
+        pass
+
     def __setitem__(self, key, value):
         """
 
@@ -453,20 +468,6 @@ class KVStore(CompactKeyValueStore):
         """
         return list(self._index.keys())
 
-    def _save_index(self):
-        self.commit()
-
-    def commit(self):
-        """
-        Flush data to disk
-        :return:
-        """
-        super(KVStore, self).commit()
-        if hasattr(self._index, "commit"):
-            self._index.commit()
-        elif hasattr(self._index, "sync"):
-            self._index.sync()
-
     @classmethod
     def load(cls, path):
         """
@@ -475,10 +476,5 @@ class KVStore(CompactKeyValueStore):
         :return:
         """
         store = cls(path, index_backend=None)
-        store.load_param()
+        store._load_param()
         return store
-
-    def _load_index(self):
-        pass
-
-

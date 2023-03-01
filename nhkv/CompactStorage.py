@@ -22,12 +22,6 @@ class CompactStorage:
         self._active_storage_size = 0
         self._has_view = False
 
-    def __len__(self):
-        return self._active_storage_size
-
-    # def keys(self):  # does not make much sense since this is acting more like array
-    #     return list(range(len(self._storage) // self._n_fields))
-
     def _create_view(self):
         if self._has_view is False:
             self._view = memoryview(self._storage)
@@ -44,6 +38,9 @@ class CompactStorage:
         if offset < 0:
             offset += len(self) * self._n_fields
         return offset, offset + self._n_fields
+
+    def __len__(self):
+        return self._active_storage_size
 
     def __getitem__(self, item):
         if item >= len(self):

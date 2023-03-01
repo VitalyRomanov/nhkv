@@ -6,6 +6,9 @@ class DbOffsetStorage:
     DbOffsetStorage class creates sqlite3 storage to keep mmap offsets for KVStore. Key for added entries has
     integer type. Meant for internal use.
     """
+
+    _is_open = False
+
     def __init__(self, path):
         """
         Creates a DbOffsetStorage instance.
@@ -23,7 +26,7 @@ class DbOffsetStorage:
             "bytes INTEGER NOT NULL)"
         )
 
-        self.is_open = True
+        self._is_open = True
         self.requires_commit = False
         self.added_without_commit = 0
 
@@ -59,16 +62,6 @@ class DbOffsetStorage:
         """
         self._add_item(key, value, how="REPLACE")
 
-    def append_key(self, key, value):
-        """
-        Append new entry to the storage.
-        :param key: Key is an integer ID. Need to guarantee that the key does not exist. Otherwise, exception is
-        raised by Sqlite.
-        :param value: Value is a tuple (shard_id, seek_position, len_bytes).
-        :return:
-        """
-        self._add_item(key, value, how="INSERT")
-
     def __getitem__(self, key):
         """
         Retrieve a record from storage.
@@ -87,17 +80,6 @@ class DbOffsetStorage:
     def __contains__(self, item):
         raise NotImplementedError("Use method `get` instead")
 
-    def get(self, item, default):
-        try:
-            return self[item]
-        except KeyError:
-            return default
-
-    def save(self):
-        self._db.commit()
-        self.requires_commit = False
-        self.added_without_commit = 0
-
     def __len__(self):
         if self.requires_commit:
             self.save()
@@ -106,15 +88,36 @@ class DbOffsetStorage:
     def __del__(self):
         self.close()
 
+    def append(self, key, value):
+        """
+        Append new entry to the storage.
+        :param key: Key is an integer ID. Need to guarantee that the key does not exist. Otherwise, exception is
+        raised by Sqlite.
+        :param value: Value is a tuple (shard_id, seek_position, len_bytes).
+        :return:
+        """
+        self._add_item(key, value, how="INSERT")
+
+    def get(self, item, default):
+        try:
+            return self[item]
+        except KeyError:
+            return default
+
     def keys(self):
         keys = self._cur.execute("SELECT key FROM offset_storage").fetchall()
         return list(key[0] for key in keys)
 
+    def save(self):
+        self._db.commit()
+        self.requires_commit = False
+        self.added_without_commit = 0
+
     def close(self):
-        if self.is_open:
+        if self._is_open:
             self.save()
             self._cur.connection.close()
-            self.is_open = False
+            self._is_open = False
 
 
 

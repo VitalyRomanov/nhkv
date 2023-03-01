@@ -9,6 +9,7 @@ class DbDict:
     be passed to the object constructor. The values are stored as pickled objects.
     """
     STR_KEY_LIMIT = 512
+    _is_open = False
 
     def __init__(self, path, key_type: Union[Type[int], Type[str]] = str, str_key_lim: Optional[int] = None):
         """
@@ -21,7 +22,7 @@ class DbDict:
         self.path = path
         self._conn = sqlite3.connect(path)
         self._cur = self._conn.cursor()
-        self.is_open = True
+        self._is_open = True
         self.requires_commit = False
         self._key_type = key_type
 
@@ -45,6 +46,11 @@ class DbDict:
         if type(key) != self._key_type:
             raise TypeError(f"Declared and provided key types to not match: {type(key)} != {self._key_type}")
 
+    def _str_key_trunc(self, key):
+        if len(key) > self.STR_KEY_LIMIT:
+            key = key[:self.STR_KEY_LIMIT]
+        return key
+
     def __setitem__(self, key, value):
         self._check_key_type(key)
 
@@ -56,11 +62,6 @@ class DbDict:
                           (key, val))
 
         self.requires_commit = True
-
-    def _str_key_trunc(self, key):
-        if len(key) > self.STR_KEY_LIMIT:
-            key = key[:self.STR_KEY_LIMIT]
-        return key
 
     def __getitem__(self, key):
         self._check_key_type(key)
@@ -80,11 +81,7 @@ class DbDict:
 
         return pickle.loads(bytes(val))
 
-    def get(self, item, default):
-        try:
-            return self[item]
-        except KeyError:
-            return default
+
 
     def __delitem__(self, key):
         try:
@@ -98,6 +95,12 @@ class DbDict:
     def __del__(self):
         self.close()
 
+    def get(self, item, default):
+        try:
+            return self[item]
+        except KeyError:
+            return default
+
     def keys(self):
         keys = self._cur.execute("SELECT key FROM [mydict]").fetchall()
         return list(key[0] for key in keys)
@@ -106,10 +109,10 @@ class DbDict:
         self._conn.commit()
 
     def close(self):
-        if self.is_open is True:
+        if self._is_open is True:
             self.save()
             self._cur.close()
             self._conn.close()
-            self.is_open = False
+            self._is_open = False
 
 
