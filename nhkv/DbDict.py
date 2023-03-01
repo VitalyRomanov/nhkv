@@ -1,32 +1,53 @@
 import sqlite3
 import pickle
+from typing import Union, Type, Optional
 
 
 class DbDict:
+    """
+    DbDict is a class for storing key-value pairs in Sqlite3 database. Keys can have types `int` or `str`, and must
+    be passed to the object constructor. The values are stored as pickled objects.
+    """
     STR_KEY_LIMIT = 512
 
-    def __init__(self, path, keytype=str, str_key_lim=None):
+    def __init__(self, path, key_type: Union[Type[int], Type[str]] = str, str_key_lim: Optional[int] = None):
+        """
+        Create a Sqlite3-backed key-value storage.
+        :param path: path to the location where database file will be created. If the file exists, existing storage is
+        loaded.
+        :param key_type: Possible key types are `int` and `str` (pass Python type names, not strings)
+        :param str_key_lim: Maximum length for string keys.
+        """
         self.path = path
         self._conn = sqlite3.connect(path)
         self._cur = self._conn.cursor()
+        self.is_open = True
         self.requires_commit = False
-        self._key_type = keytype
+        self._key_type = key_type
 
         if str_key_lim is not None:
             self.STR_KEY_LIMIT = str_key_lim
 
-        if keytype == str:
+        if key_type == str:
             keyt_ = f"VARCHAR({self.STR_KEY_LIMIT})"
-        elif keytype == int:
+        elif key_type == int:
             keyt_ = "INTEGER"
         else:
-            raise ValueError("Keytype only supports str and int")
+            raise ValueError("Supported key types are `int`, `str`")
 
-        self._cur.execute("CREATE TABLE IF NOT EXISTS [mydict] ("
-                         "[key] %s PRIMARY KEY NOT NULL, "
-                         "[value] BLOB)" % keyt_)
+        self._cur.execute(
+            "CREATE TABLE IF NOT EXISTS [mydict] ("
+            "[key] %s PRIMARY KEY NOT NULL, "
+            "[value] BLOB)" % keyt_
+        )
+
+    def _check_key_type(self, key):
+        if type(key) != self._key_type:
+            raise TypeError(f"Declared and provided key types to not match: {type(key)} != {self._key_type}")
 
     def __setitem__(self, key, value):
+        self._check_key_type(key)
+
         if self._key_type is str:
             key = self._str_key_trunc(key)
 
@@ -42,8 +63,10 @@ class DbDict:
         return key
 
     def __getitem__(self, key):
+        self._check_key_type(key)
+
         if self.requires_commit:
-            self.commit()
+            self.save()
             self.requires_commit = False
 
         if self._key_type is str:
@@ -72,13 +95,21 @@ class DbDict:
     def __len__(self):
         return self._cur.execute("SELECT COUNT() FROM [mydict]").fetchone()[0]
 
+    def __del__(self):
+        self.close()
+
     def keys(self):
         keys = self._cur.execute("SELECT key FROM [mydict]").fetchall()
         return list(key[0] for key in keys)
 
-    def commit(self):
+    def save(self):
         self._conn.commit()
 
     def close(self):
-        self._cur.close()
-        self._conn.close()
+        if self.is_open is True:
+            self.save()
+            self._cur.close()
+            self._conn.close()
+            self.is_open = False
+
+

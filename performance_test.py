@@ -41,7 +41,7 @@ def test_DbDict_write(texts, datasize, str_len):
     d = DbDict(f"dbdict_{datasize}_{str_len}.s3db")
     for i, line in enumerate(texts):
         d[str(i)] = line
-    d.commit()
+    d.save()
     d.close()
 
 

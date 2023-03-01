@@ -13,6 +13,10 @@ import mmap
 
 
 class CompactKeyValueStore:
+    """
+    CompactKeyValueStore is a class that can be used as a key-value storage. Offset index is kept in memory. Values are stored in mmap file.
+    Values are sharded into separate files.
+    """
     _file_index = None
     _index = None
     _key_map = None
@@ -23,6 +27,15 @@ class CompactKeyValueStore:
     _shard_size = 0
 
     def __init__(self, path, shard_size=2**30, serializer=None, deserializer=None, **kwargs):
+        """
+        Initialize CompactKeyValueStore instance.
+        :param path: Path to the location, where the storage will be created.
+        :param shard_size: Size of a single shard in bytes.
+        :param serializer: Function for serializing values. Must return bytes.
+        :param deserializer: Function for deserializing values. Takes in a bytes.
+        :param kwargs: additional parameters to be passed to offset storage initializer and file index
+        initializer
+        """
         self.path = Path(path)
 
         self._init_serializers(serializer, deserializer)
@@ -30,6 +43,11 @@ class CompactKeyValueStore:
         self._initialize_offset_index(**kwargs)
 
     def _init_serializers(self, serializer, deserializer):
+        """
+        :param serializer:
+        :param deserializer:
+        :return:
+        """
         if serializer is not None and deserializer is not None:
             self._serialize = serializer
             self._deserialize = deserializer
@@ -38,6 +56,11 @@ class CompactKeyValueStore:
             self._deserialize = lambda value: pickle.loads(value)
 
     def _initialize_file_index(self, shard_size, **kwargs):
+        """
+        :param shard_size: shard size in bytes
+        :param kwargs: no additional parameters are used at the moment
+        :return:
+        """
         self._file_index = dict()  # (shard, filename)
         self._opened_shards = OrderedDict()  # (shard, file, mmap object) if mmap is none -> opened for write
         self._shard_for_write = 0
@@ -45,41 +68,60 @@ class CompactKeyValueStore:
         self._shard_size = shard_size
 
     def _initialize_offset_index(self, **kwargs):
+        """
+        Initialize offset storage.
+        :param kwargs: no additional parameters are used at the moment.
+        :return:
+        """
         self._key_map = dict()
         self._index = CompactStorage(3, dtype="L")  # third of space is wasted to shards
 
     def _init_storage(self, size):
         self._index._active_storage_size = size
 
-    def __setitem__(self, key, value, key_error='ignore'):
+    def __setitem__(self, key, value):
+        """
+        :param key: Keys should be integers
+        :param value:
+        :return:
+        """
         if self._key_map is not None:
-            if key not in self._key_map:
-                self._key_map[key] = len(self._index)
-            key_: int = self._key_map[key]
+            if key in self._key_map:
+                key_: Optional[int] = self._key_map[key]
+            else:
+                key_ = None
         else:
             if not isinstance(key, int):
-                raise ValueError("Keys should be integers when setting compact_ensured=True")
-            key_: int = key
+                raise ValueError("Keys should be integers when no key map is available")
+            key_: Optional[int] = key
 
-        # serialized = pickle.dumps(value, protocol=4)
         serialized = self._serialize(value)
 
-        try:
-            existing_shard, existing_pos, existing_len = self._index[key_]  # check if there is an entry with such key
-        except IndexError:
-            pass
-        else:
-            if len(serialized) == existing_len:
-                # successfully retrieved existing position and can overwrite old data
-                _, mm = self._reading_mode(existing_shard)
-                mm[existing_pos: existing_pos + existing_len] = serialized
-                return
+        if key_ is not None:
+            try:
+                # check if there is an entry with such key
+                existing_shard, existing_pos, existing_len = self._index[key_]
+            except IndexError:
+                pass
+            else:
+                if len(serialized) == existing_len:
+                    # successfully retrieved existing position and can overwrite old data
+                    _, mm = self._reading_mode(existing_shard)
+                    mm[existing_pos: existing_pos + existing_len] = serialized
+                    return
 
-        # no old data or the key is new
+        # the key is new or the data size is different
         f, _ = self._writing_mode(self._shard_for_write)
         position = f.tell()
         written = f.write(serialized)
-        self._index.append((self._shard_for_write, position, written))
+        to_index = (self._shard_for_write, position, written)
+        if key_ is None or key_ == len(self._index):
+            index_key = self._index.append(to_index)
+            if self._key_map is not None:
+                self._key_map[key] = index_key
+        else:
+            self._index[key_] = to_index
+
         self._increment_byte_count(written)
 
     def _increment_byte_count(self, written):
@@ -89,6 +131,11 @@ class CompactKeyValueStore:
             self._written_in_current_shard = 0
 
     def __getitem__(self, key):
+        """
+        Get value from key.
+        :param key:
+        :return:
+        """
         if self._key_map is not None:
             if key not in self._key_map:
                 raise KeyError("Key does not exist:", key)
@@ -106,28 +153,46 @@ class CompactKeyValueStore:
         return len(self._index)
 
     def __contains__(self, item):
-        triplet = self._index[item]
-        if triplet is None:
-            return False
-        return True
+        raise NotImplementedError("This operation is too expensive. Use `get` instead.")
+        # triplet = self._index[item]
+        # if triplet is None:
+        #     return False
+        # return True
 
     def keys(self):
-        return self._index.keys()
+        """
+        Get list of keys
+        :return:
+        """
+        if self._key_map is not None:
+            return list(self._key_map.keys())
+        else:
+            return list(range(len(self)))
 
     def items(self):
+        """
+        Returns generator for key-value pairs
+        :return:
+        """
         for key in self.keys():
             yield key, self[key]
 
     def get(self, key, default):
+        """
+        Get value by key and return default if key does not exist.
+        :param key:
+        :param default:
+        :return:
+        """
         try:
             return self[key]
         except KeyError:
             return default
 
-    def _get_with_id(self, doc_id):
-        triplet = self._index[doc_id]
+    def _get_with_id(self, key):
+        triplet = self._index[key]
         if triplet is None:
-            raise KeyError(f"Key not found: {doc_id}")
+            raise KeyError(f"Key not found: {key}")
         shard, pos, len_ = triplet
         if len_ == 0:
             raise ValueError("Entry length is 0")
@@ -231,15 +296,22 @@ class CompactKeyValueStore:
             setattr(self, name, var)
 
     def _save_index(self):
-        pickle.dump(self._index, open(self.path.joinpath("store_index"), "wb"), protocol=4)
+        self._index.save(self.path.joinpath("store_index"))
 
     def _load_index(self):
-        self._index = pickle.load(open(self.path.joinpath("store_index"), "rb"))
+        self._index = CompactStorage.load(self.path.joinpath("store_index"))
+
+    def __del__(self):
+        self.save()
 
     def save(self):
+        """
+        Save all required information for loading later from disk.
+        :return:
+        """
+        self.commit()
         self._save_index()
         self.save_param()
-        self._close_all_shards()
 
     @classmethod
     def load(cls, path):
@@ -255,6 +327,7 @@ class CompactKeyValueStore:
                     s.flush()
 
     def close(self):
+        self.save()
         self._close_all_shards()
 
     def commit(self):
@@ -287,19 +360,22 @@ class KVStore(CompactKeyValueStore):
         if type(self._index) is DbDict:
             raise NotImplementedError()
             # self._key_type = str
-            # self._key_type_error_message = "Key type should be `str` when `sqlite` is used for index backend, but {key_type} given."
+            # self._key_type_error_message = "Key type should be `str` when `sqlite` is used " \
+            #                                "for index backend, but {key_type} given."
         elif type(self._index) is DbOffsetStorage:
             self._key_type = int
-            self._key_type_error_message = "Key type should be `int` when `sqlite` is used for index backend, but `{key_type}` given."
+            self._key_type_error_message = "Key type should be `int` when `sqlite` is used " \
+                                           "for index backend, but `{key_type}` given."
         elif type(self._index) is shelve.DbfilenameShelf:
             self._key_type = str
-            self._key_type_error_message = "Key type should be `str` when `shelve` is used for index backend, but `{key_type}` given."
+            self._key_type_error_message = "Key type should be `str` when `shelve` is used " \
+                                           "for index backend, but `{key_type}` given."
         else:
             raise ValueError("Unknown index type")
 
-    def _verify_key_type(self, key_type):
-        if key_type != self._key_type:
-            raise ValueError(self._key_type_error_message.format(key_type=key_type.__name__))
+    def _verify_key_type(self, key):
+        if type(key) != self._key_type:
+            raise TypeError(self._key_type_error_message.format(key_type=type(key).__name__))
 
     def _initialize_offset_index(self, index_backend="sqlite", **kwargs):
         if index_backend is None:
@@ -325,9 +401,7 @@ class KVStore(CompactKeyValueStore):
 
     def _create_index(self, index_path):
 
-        parent = index_path.parent
-        if not parent.is_dir():
-            parent.mkdir()
+        index_path.parent.mkdir(exist_ok=True)
 
         if index_path.name.endswith(".shelve"):
             self._index = shelve.open(str(index_path.absolute()), protocol=4)
@@ -335,8 +409,14 @@ class KVStore(CompactKeyValueStore):
             self._index = DbOffsetStorage(index_path)
             # self._index = DbDict(index_path)
 
-    def __setitem__(self, key, value, key_error='ignore'):
-        self._verify_key_type(type(key))
+    def __setitem__(self, key, value):
+        """
+
+        :param key:
+        :param value:
+        :return:
+        """
+        self._verify_key_type(key)
 
         serialized = self._serialize(value)
 
@@ -349,17 +429,38 @@ class KVStore(CompactKeyValueStore):
         self._increment_byte_count(written)
 
     def __getitem__(self, key):
-        if type(self._index) is DbDict:
-            if type(key) is not str:
-                raise TypeError(
-                    f"Key type should be `str` when `sqlite` is used for index backend, but {type(key)} given."
-                )
+        """
+
+        :param key:
+        :return:
+        """
+        self._verify_key_type(key)
+
+        # if type(self._index) is DbDict:
+        #     if type(key) is not str:
+        #         raise TypeError(
+        #             f"Key type should be `str` when `sqlite` is used for index backend, but {type(key)} given."
+        #         )
         return self._get_with_id(key)
+
+    def __contains__(self, item):
+        raise NotImplementedError("This operation is too expensive. Use `get` instead.")
+
+    def keys(self):
+        """
+        Get list of keys
+        :return:
+        """
+        return list(self._index.keys())
 
     def _save_index(self):
         self.commit()
 
     def commit(self):
+        """
+        Flush data to disk
+        :return:
+        """
         super(KVStore, self).commit()
         if hasattr(self._index, "commit"):
             self._index.commit()
@@ -368,9 +469,16 @@ class KVStore(CompactKeyValueStore):
 
     @classmethod
     def load(cls, path):
+        """
+        Load previously created storage
+        :param path:
+        :return:
+        """
         store = cls(path, index_backend=None)
         store.load_param()
         return store
 
     def _load_index(self):
         pass
+
+

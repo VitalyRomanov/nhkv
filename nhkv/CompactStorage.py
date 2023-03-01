@@ -1,9 +1,21 @@
+import pickle
 from array import array
-from time import time
 
 
 class CompactStorage:
+    """
+    CompactStorage is a class that stores n fields of the same data type as array instead of python
+    objects. Such representation allows to save a considerable amount of space and retrieval time. During
+    reads, creates a memoryview that allows to further reduce reading time. Keys must be added sequentially.
+    Meant for internal use.
+    """
     def __init__(self, n_fields=1, dtype="L"):
+        """
+        Creates a CompactStorage objects with n fields of type dtype
+        :param n_fields: Number of field per record. Records are returned as tuples.
+        :param dtype: Type of fields. All fields have the same type. The type descriptor should be one
+        of available in standard array package.
+        """
         self._storage = array(dtype)
         self._view = None
         self._n_fields = n_fields
@@ -13,8 +25,8 @@ class CompactStorage:
     def __len__(self):
         return self._active_storage_size
 
-    def keys(self):
-        return list(range(len(self._storage) // self._n_fields))
+    # def keys(self):  # does not make much sense since this is acting more like array
+    #     return list(range(len(self._storage) // self._n_fields))
 
     def _create_view(self):
         if self._has_view is False:
@@ -24,7 +36,14 @@ class CompactStorage:
     def _release_view(self):
         if self._has_view is True:
             self._view.release()
+            self._view = None
             self._has_view = False
+
+    def _get_array_span_for_item(self, item):
+        offset = item * self._n_fields
+        if offset < 0:
+            offset += len(self) * self._n_fields
+        return offset, offset + self._n_fields
 
     def __getitem__(self, item):
         if item >= len(self):
@@ -32,147 +51,46 @@ class CompactStorage:
 
         self._create_view()
 
-        offset = item * self._n_fields
+        start, end = self._get_array_span_for_item(item)
 
-        return tuple(self._view[offset: offset + self._n_fields].tolist())
+        return tuple(self._view[start: end].tolist())
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, item, value):
+        """
+        Overwrite existing key.
+        :param item: Integer index
+        :param value: tuple of length `n_fields`
+        :return:
+        """
 
         self._release_view()
 
-        if key >= len(self):
-            raise IndexError("Out of range:", key)
+        if item >= len(self):
+            raise IndexError("Out of range:", item)
 
-        key = key * self._n_fields
+        start, _ = self._get_array_span_for_item(item)
 
         for ind, v in enumerate(value):
-            self._storage[key + ind] = v
+            self._storage[start + ind] = v
 
     def append(self, value):
+        """
+        Append new entry.
+        :param value: tuple of length `n_fields`
+        :return: index of added entry
+        """
         self._release_view()
 
         self._storage.extend(value)
         self._active_storage_size += 1
+        return self._active_storage_size - 1
+
+    def save(self, path):
+        self._release_view()
+        pickle.dump(self, open(path, "wb"), protocol=4)
+
+    @classmethod
+    def load(cls, path):
+        return pickle.load(open(path, "rb"))
 
 
-def test_CompactStorage():
-    import random
-
-    random_range = list(range(1000))
-
-    num_to_write = 100
-
-    to_write = list(zip(random.choices(random_range, k=num_to_write), random.choices(random_range, k=num_to_write)))
-    to_get = list(range(num_to_write))
-    random.shuffle(to_get)
-    proper = [to_write[ind] for ind in to_get]
-
-    s1 = CompactStorage(2)
-
-    print("starting tests")
-
-    start = time()
-    for record in to_write:
-        s1.append(record)
-    end = time()
-
-    print(f"S1 write duration {end - start} seconds")
-
-    start = time()
-    retrieved = []
-    for ind in to_get:
-        retrieved.append(s1[ind])
-    end = time()
-
-    print(f"S1 read duration {end - start} seconds")
-
-    assert proper == retrieved
-
-
-
-# # def compare_speed():
-# #     import random
-# #
-# #     random_range = list(range(100000))
-# #
-# #     num_to_write = 10000000
-# #
-# #     to_write = list(zip(random.choices(random_range, k=num_to_write), random.choices(random_range, k=num_to_write)))
-# #     to_get = list(range(num_to_write))
-# #     random.shuffle(to_get)
-# #
-# #     s1 = CompactStorage(2)
-# #     s2 = CompactStorage2(2)
-# #     s3 = CompactStorage3()
-# #     s4 = CompactStorage4(2)
-# #
-# #     print("starting tests")
-# #
-# #     start = time()
-# #     for record in to_write:
-# #         s1.append(record)
-# #     end = time()
-# #
-# #     print(f"S1 write duration {end - start} seconds")
-# #
-# #     start = time()
-# #     for ind in to_get:
-# #         a = s1[ind]
-# #     end = time()
-# #
-# #     print(f"S1 read duration {end - start} seconds")
-# #
-# #
-# #
-# #     start = time()
-# #     for record in to_write:
-# #         s2.append(record)
-# #     end = time()
-# #
-# #     print(f"S2 write duration {end - start} seconds")
-# #
-# #     start = time()
-# #     for ind in to_get:
-# #         a = s2[ind]
-# #     end = time()
-# #
-# #     print(f"S2 read duration {end - start} seconds")
-# #
-# #
-# #
-# #
-# #     start = time()
-# #     for record in to_write:
-# #         s3.append(record)
-# #     end = time()
-# #
-# #     print(f"S3 write duration {end - start} seconds")
-# #
-# #     start = time()
-# #     for ind in to_get:
-# #         a = s3[ind]
-# #     end = time()
-# #
-# #     print(f"S3 read duration {end - start} seconds")
-# #
-# #
-# #
-# #     start = time()
-# #     for record in to_write:
-# #         s4.append(record)
-# #     end = time()
-# #
-# #     print(f"S4 write duration {end - start} seconds")
-# #
-# #     s4.view = memoryview(s4._storage)
-# #
-# #     start = time()
-# #     for ind in to_get:
-# #         a = s4[ind]
-# #     end = time()
-# #
-# #     print(f"S4 read duration {end - start} seconds")
-#
-#
-# if __name__ == "__main__":
-#     compare_speed()
