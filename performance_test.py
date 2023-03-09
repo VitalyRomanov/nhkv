@@ -37,7 +37,7 @@ def test_shelve_write(texts, datasize, str_len):
 
 
 def test_sqlitedict_write(texts, datasize, str_len):
-    d = SqliteDict(f'sqlitedict_{datasize}_{str_len}.sqlite')
+    d = SqliteDict(f'sqlitedict_{datasize}_{str_len}.sqlite', outer_stack=False, autocommit=False)
     for i, line in enumerate(texts):
         d[str(i)] = line
     d.commit()
@@ -96,7 +96,7 @@ def test_shelve_read(texts, datasize, str_len):
 
 
 def test_sqlitedict_read(texts, datasize, str_len):
-    d = SqliteDict(f'sqlitedict_{datasize}_{str_len}.sqlite')
+    d = SqliteDict(f'sqlitedict_{datasize}_{str_len}.sqlite', outer_stack=False, autocommit=False)
     for i, text in enumerate(texts):
         a = d[str(i)]
         assert a == text
