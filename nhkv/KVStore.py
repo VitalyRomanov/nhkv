@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from collections import OrderedDict
 from pathlib import Path
@@ -133,7 +134,44 @@ class CompactKeyValueStore:
                 shard[1].close()
             shard[0].close()
 
+    def _lock_error(self):
+        raise RuntimeError(
+            "Storage is locked. Make sure you called `save` when wrote data to the storage during the previous run"
+            "and that you are using the storage from the same process where it was created. If error persists for "
+            "no reason, remove the lock file."
+        )
+
+    def _lock_storage(self):
+        lock_path = self.path.joinpath("lock")
+
+        if lock_path.is_file():
+            with open(lock_path, 'r') as lock:  # lock storage
+                pid_str = lock.read().strip()
+                pid = int(pid_str)
+
+            if pid == os.getpid():
+                pass
+            else:
+                self._lock_error()
+        else:
+            with open(lock_path, 'w') as lock:  # lock storage
+                lock.write(f"{os.getpid()}")
+
+    def _unlock_storage(self):
+        lock_path = self.path.joinpath("lock")
+
+        if lock_path.is_file():
+            with open(lock_path, 'r') as lock:  # lock storage
+                pid_str = lock.read().strip()
+                pid = int(pid_str)
+            if pid == os.getpid():
+                os.remove(lock_path)
+            else:
+                self._lock_error()
+
     def _writing_mode(self, id_):
+        self._lock_storage()
+
         if id_ not in self._opened_shards:
             if id_ not in self._file_index:
                 self._file_index[id_] = self._get_name_format(id_)
@@ -147,6 +185,8 @@ class CompactKeyValueStore:
         return self._opened_shards[id_]
 
     def _reading_mode(self, id_):
+        self._unlock_storage()
+
         if id_ not in self._opened_shards:
             if id_ not in self._file_index:
                 self._file_index[id_] = self._get_name_format(id_)
@@ -331,6 +371,7 @@ class CompactKeyValueStore:
         self._flush_shards()
         self._save_index()
         self._save_param()
+        self._unlock_storage()
 
     @classmethod
     def load(cls, path):
