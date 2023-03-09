@@ -1,3 +1,7 @@
+import os
+import shutil
+
+
 def test_compact_storage():
     import random
     from nhkv.CompactStorage import CompactStorage
@@ -159,7 +163,6 @@ def test_db_dict():
     os.remove(str_db_path)
 
 
-
 def test_compact_key_value_storage():
     from nhkv.KVStore import CompactKeyValueStore
 
@@ -303,14 +306,19 @@ def test_kv_store_shelve():
 def test_context_manager():
     from nhkv import get_or_create_storage
     from nhkv import DbDict
-    storage1 = get_or_create_storage(DbDict, path="dbdict.db")
-    storage2 = get_or_create_storage(DbDict, path="dbdict.db")
+    dbdict_path = "dbdict.db"
+    storage1 = get_or_create_storage(DbDict, path=dbdict_path)
+    storage2 = get_or_create_storage(DbDict, path=dbdict_path)
     assert id(storage1) == id(storage2)
 
     from nhkv import KVStore
-    storage1 = get_or_create_storage(KVStore, path="storage")
-    storage2 = get_or_create_storage(KVStore, path="storage")
+    storage_path = "storage"
+    storage1 = get_or_create_storage(KVStore, path=storage_path)
+    storage2 = get_or_create_storage(KVStore, path=storage_path)
     assert id(storage1) == id(storage2)
+
+    os.remove(dbdict_path)
+    shutil.rmtree(storage_path)
 
 
 def test_storage_lock():
@@ -326,3 +334,4 @@ def test_storage_lock():
     assert not storage_path.joinpath("lock").is_file()
     storage1[0] = "test"
     storage1.save()
+    shutil.rmtree(storage_path)
