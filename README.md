@@ -7,7 +7,7 @@ NHKV (no hassle key-value) is a library for on-disk key-value storage. The use c
 ## Installation
 
 ```bash
-pip install nhrv
+pip install nhkv
 ```
 
 ## Quick Start
