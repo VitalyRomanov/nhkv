@@ -3,7 +3,7 @@ from distutils.core import setup
 
 setup(
       name='nhkv',
-      version='0.0.1',
+      version='0.0.2',
       py_modules=['nhkv'],
       install_requires=["dill"],
       scripts=[],
