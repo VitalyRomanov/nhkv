@@ -298,3 +298,31 @@ def test_kv_store_shelve():
 
     import shutil
     shutil.rmtree(path)
+
+
+def test_context_manager():
+    from nhkv import get_or_create_storage
+    from nhkv import DbDict
+    storage1 = get_or_create_storage(DbDict, path="dbdict.db")
+    storage2 = get_or_create_storage(DbDict, path="dbdict.db")
+    assert id(storage1) == id(storage2)
+
+    from nhkv import KVStore
+    storage1 = get_or_create_storage(KVStore, path="storage")
+    storage2 = get_or_create_storage(KVStore, path="storage")
+    assert id(storage1) == id(storage2)
+
+
+def test_storage_lock():
+    from nhkv import get_or_create_storage
+    from nhkv import KVStore
+    from pathlib import Path
+
+    storage_path = Path("storage")
+    storage1 = get_or_create_storage(KVStore, path=storage_path)
+    storage1[0] = "test"
+    assert storage_path.joinpath("lock").is_file()
+    test = storage1[0]
+    assert not storage_path.joinpath("lock").is_file()
+    storage1[0] = "test"
+    storage1.save()
