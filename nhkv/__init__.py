@@ -18,6 +18,10 @@ class _ContextManager:
     def set_instance(cls, path, instance):
         cls.storage_instances[path] = instance
 
+    @classmethod
+    def remove_instance(cls, path):
+        del cls.storage_instances[path]
+
 
 def get_or_create_storage(storage_class, **kwargs):
     path = kwargs.get("path", None)
@@ -31,13 +35,21 @@ def get_or_create_storage(storage_class, **kwargs):
     else:
         raise ValueError(f"Path type is not recognized: {type(path)}")
 
-    path = str(path.absolute())
+    path = path.absolute()
 
-    instance = _ContextManager.get_instance(path)
+    instance = _ContextManager.get_instance(str(path))
+    if path.is_file() or path.is_dir():
+        pass
+    else:
+        # storage was already removed
+        if instance is not None:
+            _ContextManager.remove_instance(str(path))
+        instance = None
+
     if instance is not None:
         assert storage_class == type(instance), "Types of requested and existing storage do not match"
     else:
         instance = storage_class(**kwargs)
-        _ContextManager.set_instance(path, instance)
+        _ContextManager.set_instance(str(path), instance)
 
     return instance
