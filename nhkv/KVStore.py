@@ -44,6 +44,7 @@ class CompactKeyValueStore:
         self._init_serializers(serializer, deserializer)
         self._initialize_file_index(shard_size, **kwargs)
         self._initialize_offset_index(**kwargs)
+        self._check_dir_exists()
 
         self._is_open = True
 
@@ -119,7 +120,6 @@ class CompactKeyValueStore:
 
     def _open_for_write(self, name):
         # raise file not exists
-        self._check_dir_exists()
         f = open(self.path.joinpath(name), "ab")
         return f, None
 
