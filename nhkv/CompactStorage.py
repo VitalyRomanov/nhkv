@@ -6,15 +6,15 @@ class CompactStorage:
     """
     CompactStorage is a class that stores n fields of the same data type as array instead of python
     objects. Such representation allows to save a considerable amount of space and retrieval time. During
-    reads, creates a memoryview that allows to further reduce reading time. Keys must be added sequentially.
+    reads, creates a `memoryview` that allows to further reduce reading time. Keys must be added sequentially.
     Meant for internal use.
     """
     def __init__(self, n_fields=1, dtype="L"):
         """
         Creates a CompactStorage objects with n fields of type dtype
-        :param n_fields: Number of field per record. Records are returned as tuples.
+        :param n_fields: Number of field per record. Records are returned as tuples
         :param dtype: Type of fields. All fields have the same type. The type descriptor should be one
-        of available in standard array package.
+        of available in standard array package
         """
         self._storage = array(dtype)
         self._view = None
@@ -54,7 +54,7 @@ class CompactStorage:
 
     def __setitem__(self, item, value):
         """
-        Overwrite existing key.
+        Overwrite existing key
         :param item: Integer index
         :param value: tuple of length `n_fields`
         :return:
@@ -72,7 +72,7 @@ class CompactStorage:
 
     def append(self, value):
         """
-        Append new entry.
+        Append new entry
         :param value: tuple of length `n_fields`
         :return: index of added entry
         """

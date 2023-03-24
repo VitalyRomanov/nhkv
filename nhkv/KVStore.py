@@ -5,10 +5,10 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Optional, Union
 
-from nhkv import DbDict
 import shelve
 import dill as pickle
 
+from nhkv.dbdict.sqlitedbdict import SqliteDbDict
 from nhkv.DbOffsetStorage import DbOffsetStorage
 from nhkv.CompactStorage import CompactStorage
 import mmap
@@ -31,11 +31,11 @@ class CompactKeyValueStore:
 
     def __init__(self, path, shard_size=2**30, serializer=None, deserializer=None, **kwargs):
         """
-        Initialize CompactKeyValueStore instance.
-        :param path: Path to the location, where the storage will be created.
-        :param shard_size: Size of a single shard in bytes.
-        :param serializer: Function for serializing values. Must return bytes.
-        :param deserializer: Function for deserializing values. Takes in a bytes.
+        Initialize CompactKeyValueStore instance
+        :param path: Path to the location, where the storage will be created
+        :param shard_size: Size of a single shard in bytes
+        :param serializer: Function for serializing values. Must return bytes
+        :param deserializer: Function for deserializing values. Takes in a bytes
         :param kwargs: additional parameters to be passed to offset storage initializer and file index
         initializer
         """
@@ -68,8 +68,10 @@ class CompactKeyValueStore:
         self._serialize = lambda value: pickle.dumps(value, protocol=4, fix_imports=False)
         self._deserialize = lambda value: pickle.loads(value)
 
+    # noinspection PyUnusedLocal
     def _initialize_file_index(self, shard_size, **kwargs):
         """
+        Initialize file index
         :param shard_size: shard size in bytes
         :param kwargs: no additional parameters are used at the moment
         :return:
@@ -82,8 +84,8 @@ class CompactKeyValueStore:
 
     def _initialize_offset_index(self, **kwargs):
         """
-        Initialize offset storage.
-        :param kwargs: no additional parameters are used at the moment.
+        Initialize offset storage
+        :param kwargs: no additional parameters are used at the moment
         :return:
         """
         self._key_map = dict()
@@ -264,6 +266,7 @@ class CompactKeyValueStore:
 
     def __setitem__(self, key, value):
         """
+        Set item
         :param key: Keys should be integers
         :param value:
         :return:
@@ -353,7 +356,7 @@ class CompactKeyValueStore:
 
     def get(self, key, default):
         """
-        Get value by key and return default if key does not exist.
+        Get value by key and return default if key does not exist
         :param key:
         :param default:
         :return:
@@ -397,12 +400,12 @@ class KVStore(CompactKeyValueStore):
     ):
         """
         Create a disk backed key-value storage.
-        :param path: Location on the disk.
-        :param shard_size: Size of storage partition in bytes.
+        :param path: Location on the disk
+        :param shard_size: Size of storage partition in bytes
         :param index_backend: Backend for storing the index. Available backends are `shelve` and `sqlite`. `shelve` is
             based on Python's shelve library. It relies on key hashing and collisions are possible. Additionally,
             `shelve` storage occupies more space on disk. There is no collisions with `sqlite`, but key value is must
-            be string.
+            be string
         """
         super().__init__(
             path, shard_size, serializer=serializer, deserializer=deserializer, index_backend=index_backend, **kwargs
@@ -411,7 +414,7 @@ class KVStore(CompactKeyValueStore):
         self._infer_key_type()
 
     def _infer_key_type(self):
-        if type(self._index) is DbDict:
+        if type(self._index) is SqliteDbDict:
             raise NotImplementedError()
             # self._key_type = str
             # self._key_type_error_message = "Key type should be `str` when `sqlite` is used " \
@@ -437,10 +440,10 @@ class KVStore(CompactKeyValueStore):
         self._index_backend = index_backend
         self._create_index()
 
-    def _get_shelve_index_path(self, with_siffix=False):
+    def _get_shelve_index_path(self, with_suffix=False):
         db_name = "shelve_index"
         initial_name = self.path.joinpath(db_name)
-        if not with_siffix:
+        if not with_suffix:
             return initial_name
 
         dir_ = initial_name.parent
@@ -456,7 +459,7 @@ class KVStore(CompactKeyValueStore):
         return self.path.joinpath("sqlite_index.db")
 
     def _infer_backend(self):
-        if self._get_shelve_index_path(with_siffix=True).is_file():
+        if self._get_shelve_index_path(with_suffix=True).is_file():
             return "shelve"
         elif self._get_sqlite_index_path().is_file():
             return "sqlite"

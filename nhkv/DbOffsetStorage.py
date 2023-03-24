@@ -11,8 +11,8 @@ class DbOffsetStorage:
 
     def __init__(self, path):
         """
-        Creates a DbOffsetStorage instance.
-        :param path: Path to the dataset file. If exists, existing database is loaded.
+        Creates a DbOffsetStorage instance
+        :param path: Path to the dataset file. If exists, existing database is loaded
         """
         self.path = path
 
@@ -32,17 +32,18 @@ class DbOffsetStorage:
 
     def _add_item(self, key, value, how="REPLACE"):
         """
-        Add entry to the database.
-        :param key: Key is an integer ID.
-        :param value: Value is a tuple (shard_id, seek_position, len_bytes).
+        Add entry to the database
+        :param key: Key is an integer ID
+        :param value: Value is a tuple (shard_id, seek_position, len_bytes)
         :param how: Specifies how new entries are added. The default value `REPLACE` ensured added key IDs
         are unique. Can use `INSERT` to make insertion faster, but need to guarantee key uniqueness in this case,
         otherwise an exception is raised by Sqlite. Automatic commits every 100000 records. Otherwise, need to
-        call method `commit` manually.
+        call method `commit` manually
         :return:
         """
         if type(key) is not int:
             raise TypeError("Key type should be int but given: ", type(key))
+        # noinspection PyShadowingBuiltins
         shard, position, bytes = value
         self._cur.execute(
             f"{how} INTO offset_storage (key, shard, position, bytes) VALUES (?,?,?,?)",
@@ -55,17 +56,17 @@ class DbOffsetStorage:
 
     def __setitem__(self, key, value):
         """
-        Add new entry to the storage or replace the old one.
-        :param key: Key is an integer ID.
-        :param value: Value is a tuple (shard_id, seek_position, len_bytes).
+        Add new entry to the storage or replace the old one
+        :param key: Key is an integer ID
+        :param value: Value is a tuple (shard_id, seek_position, len_bytes)
         :return:
         """
         self._add_item(key, value, how="REPLACE")
 
     def __getitem__(self, key):
         """
-        Retrieve a record from storage.
-        :param key: Key is an integer ID.
+        Retrieve a record from storage
+        :param key: Key is an integer ID
         :return:
         """
         if self.requires_commit:
@@ -90,10 +91,10 @@ class DbOffsetStorage:
 
     def append(self, key, value):
         """
-        Append new entry to the storage.
+        Append new entry to the storage
         :param key: Key is an integer ID. Need to guarantee that the key does not exist. Otherwise, exception is
-        raised by Sqlite.
-        :param value: Value is a tuple (shard_id, seek_position, len_bytes).
+        raised by Sqlite
+        :param value: Value is a tuple (shard_id, seek_position, len_bytes)
         :return:
         """
         self._add_item(key, value, how="INSERT")
