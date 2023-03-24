@@ -1,19 +1,17 @@
-import pickle
+from nhkv.dbdict.abstractdbdict import AbstractDbDict
 
 
-class LevelDbDict:
-    _is_open = False
-
-    # noinspection PyUnusedLocal
+class LevelDbDict(AbstractDbDict):
     def __init__(self, path, **kwargs):
+        super().__init__(path, **kwargs)
+
+    def _initialize_connection(self, path, **kwargs):
         try:
             # noinspection PyPackageRequirements
             import leveldb
         except ImportError:
             raise ImportError("Install leveldb: pip install leveldb")
-        self.path = path
         self._conn = leveldb.LevelDB(path, create_if_missing=True)
-        self._is_open = True
 
     @classmethod
     def _check_key_type(cls, key):
@@ -31,11 +29,11 @@ class LevelDbDict:
 
     def __setitem__(self, key, value):
         key = self._encode_key(key)
-        self._conn.Put(key, pickle.dumps(value, protocol=4))
+        self._conn.Put(key, self._serialize(value))
 
     def __getitem__(self, key):
         key = self._encode_key(key)
-        return pickle.loads(self._conn.Get(key))
+        return self._deserialize(self._conn.Get(key))
 
     def __delitem__(self, key):
         key = self._encode_key(key)
@@ -50,12 +48,6 @@ class LevelDbDict:
 
     def __del__(self):
         self.close()
-
-    def get(self, item, default):
-        try:
-            return self[item]
-        except KeyError:
-            return default
 
     def keys(self):
         it = self._conn.RangeIter()

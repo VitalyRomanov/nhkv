@@ -1,9 +1,10 @@
 import sqlite3
-import pickle
 from typing import Union, Type, Optional
 
+from nhkv.dbdict.abstractdbdict import AbstractDbDict
 
-class SqliteDbDict:
+
+class SqliteDbDict(AbstractDbDict):
     """
     SqliteDbDict is a class for storing key-value pairs in Sqlite3 database. Keys can have types `int` or `str`, and
     must be passed to the object constructor. The values are stored as pickled objects.
@@ -11,7 +12,7 @@ class SqliteDbDict:
     STR_KEY_LIMIT = 512
     _is_open = False
 
-    def __init__(self, path, key_type: Union[Type[int], Type[str]] = str, str_key_lim: Optional[int] = None):
+    def __init__(self, path, key_type: Union[Type[int], Type[str]] = str, str_key_lim: Optional[int] = None, **kwargs):
         """
         Create a Sqlite3-backed key-value storage
         :param path: path to the location where database file will be created. If the file exists, existing storage is
@@ -19,11 +20,15 @@ class SqliteDbDict:
         :param key_type: Possible key types are `int` and `str` (pass Python type names, not strings)
         :param str_key_lim: Maximum length for string keys
         """
-        self.path = path
+        super().__init__(path, key_type=key_type, str_key_lim=str_key_lim, **kwargs)
+
+    def _initialize_connection(self, path, **kwargs):
+        key_type = kwargs["key_type"]
+        str_key_lim = kwargs["str_key_lim"]
+
         self._conn = sqlite3.connect(path)
         self._cur = self._conn.cursor()
-        self._is_open = True
-        self.requires_commit = False
+
         self._key_type = key_type
 
         if str_key_lim is not None:
@@ -57,7 +62,7 @@ class SqliteDbDict:
         if self._key_type is str:
             key = self._str_key_trunc(key)
 
-        val = sqlite3.Binary(pickle.dumps(value, protocol=4))
+        val = sqlite3.Binary(self._serialize(value))
         self._cur.execute("REPLACE INTO [mydict] (key, value) VALUES (?, ?)",
                           (key, val))
 
@@ -79,7 +84,7 @@ class SqliteDbDict:
             raise KeyError("Key not found")
         val = resp[0][0]
 
-        return pickle.loads(bytes(val))
+        return self._deserialize(bytes(val))
 
     def __delitem__(self, key):
         try:
@@ -92,12 +97,6 @@ class SqliteDbDict:
 
     def __del__(self):
         self.close()
-
-    def get(self, item, default):
-        try:
-            return self[item]
-        except KeyError:
-            return default
 
     def keys(self):
         keys = self._cur.execute("SELECT key FROM [mydict]").fetchall()

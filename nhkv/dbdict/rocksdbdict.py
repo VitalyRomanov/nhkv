@@ -1,21 +1,17 @@
-import gc
-import pickle
-import weakref
+from nhkv.dbdict.abstractdbdict import AbstractDbDict
 
 
-class RocksDbDict:
-    _is_open = False
-
-    # noinspection PyUnusedLocal
+class RocksDbDict(AbstractDbDict):
     def __init__(self, path, **kwargs):
+        super().__init__(path, **kwargs)
+
+    def _initialize_connection(self, path, **kwargs):
         try:
             # noinspection PyPackageRequirements
             import rocksdb
         except ImportError:
             raise ImportError("Install rocksdb: pip install python-rocksdb")
-        self.path = path
         self._conn = rocksdb.DB(path, rocksdb.Options(create_if_missing=True))
-        self._is_open = True
 
     @classmethod
     def _check_key_type(cls, key):
@@ -33,14 +29,14 @@ class RocksDbDict:
 
     def __setitem__(self, key, value):
         key = self._encode_key(key)
-        self._conn.put(key, pickle.dumps(value, protocol=4))
+        self._conn.put(key, self._serialize(value))
 
     def __getitem__(self, key):
         key = self._encode_key(key)
         value = self._conn.get(key)
         if value is None:
             raise KeyError(f"Key not found: {self._decode_key(key)}")
-        return pickle.loads(value)
+        return self._deserialize(value)
 
     def __delitem__(self, key):
         key = self._encode_key(key)
@@ -51,12 +47,6 @@ class RocksDbDict:
 
     def __del__(self):
         pass
-
-    def get(self, item, default):
-        try:
-            return self[item]
-        except KeyError:
-            return default
 
     def keys(self):
         it = self._conn.iterkeys()
