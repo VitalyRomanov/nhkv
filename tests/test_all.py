@@ -18,14 +18,14 @@ def test_compact_storage():
 
     s1 = CompactStorage(2)
 
-    print("starting tests")
+    # print("starting tests")
 
     start = time()
     for record in to_write:
         s1.append(record)
     end = time()
 
-    print(f"S1 write duration {end - start} seconds")
+    # print(f"S1 write duration {end - start} seconds")
     assert len(s1) == num_to_write
 
     start = time()
@@ -34,7 +34,7 @@ def test_compact_storage():
         retrieved.append(s1[ind])
     end = time()
 
-    print(f"S1 read duration {end - start} seconds")
+    # print(f"S1 read duration {end - start} seconds")
 
     assert proper == retrieved
 
@@ -64,6 +64,7 @@ def test_db_offset_storage():
     assert storage[1] == (4, 5, 6)
 
     try:
+        # noinspection PyUnusedLocal
         temp = storage[2]
         assert False, "Exception is not caught"
     except KeyError:
@@ -92,11 +93,11 @@ def test_db_offset_storage():
 
 
 def test_db_dict():
-    from nhkv.DbDict import DbDict
+    from nhkv.dbdict.sqlitedbdict import SqliteDbDict
     import os
 
     int_db_path = "test_int_key.db"
-    storage = DbDict(int_db_path, key_type=int)
+    storage = SqliteDbDict(int_db_path, key_type=int)
     storage[1] = 2
     storage[0] = 1
     storage[3] = 4
@@ -107,12 +108,14 @@ def test_db_dict():
         pass
 
     try:
+        # noinspection PyUnusedLocal
         test = storage[2]
         assert False, "Exception is not caught"
     except KeyError:
         pass
 
     try:
+        # noinspection PyUnusedLocal
         test = storage["cat"]
         assert False, "Exception is not caught"
     except TypeError:
@@ -123,13 +126,15 @@ def test_db_dict():
     assert storage.keys() == [0, 1, 3]
 
     storage.save()
+    # noinspection PyUnusedLocal
     test = storage[1]
     storage.close()  # not reversible
     del storage
     os.remove(int_db_path)
 
     str_db_path = "test_str_key.db"
-    storage = DbDict(str_db_path, key_type=str)
+    storage = SqliteDbDict(str_db_path, key_type=str)
+    # noinspection DuplicatedCode
     storage["1"] = 2
     storage["0"] = 1
     storage["3"] = 4
@@ -141,12 +146,14 @@ def test_db_dict():
         pass
 
     try:
+        # noinspection PyUnusedLocal
         test = storage["2"]
         assert False, "Exception is not caught"
     except KeyError:
         pass
 
     try:
+        # noinspection PyUnusedLocal
         test = storage[3]
         assert False, "Exception is not caught"
     except TypeError:
@@ -157,10 +164,55 @@ def test_db_dict():
     assert storage.keys() == ["1", "0", "3"]
 
     storage.save()
+    # noinspection PyUnusedLocal
     test = storage["1"]
     storage.close()  # not reversible
     del storage
     os.remove(str_db_path)
+
+
+def test_auto_db_dict():
+    from nhkv import AutoDbDict
+
+    for backend in ["rocksdb", "leveldb"]:
+        str_db_path = f"test_str_key_{backend}.db"
+        storage = AutoDbDict(str_db_path, backend)
+        # noinspection DuplicatedCode
+        storage["1"] = 2
+        storage["0"] = 1
+        storage["3"] = 4
+
+        try:
+            storage[3] = 4
+            assert False, "Exception is not caught"
+        except TypeError:
+            pass
+
+        try:
+            # noinspection PyUnusedLocal
+            test = storage["2"]
+            assert False, "Exception is not caught"
+        except KeyError:
+            pass
+
+        try:
+            # noinspection PyUnusedLocal
+            test = storage[3]
+            assert False, "Exception is not caught"
+        except TypeError:
+            pass
+
+        assert len(storage) == 3
+
+        assert sorted(storage.keys()) == sorted(["1", "0", "3"])
+
+        storage.save()
+        # noinspection PyUnusedLocal
+        test = storage["1"]
+        storage.close()  # not reversible
+        del storage
+
+        # os.remove(str_db_path)
 
 
 def test_compact_key_value_storage():
@@ -173,6 +225,7 @@ def test_compact_key_value_storage():
     storage["nice"] = ["size"] * 5
 
     try:
+        # noinspection PyUnusedLocal
         test = storage["not nice"]
         assert False, "Exception is not caught"
     except KeyError:
@@ -212,6 +265,7 @@ def test_kv_store_sqlite():
     storage[10] = ["size"] * 5
 
     try:
+        # noinspection PyUnusedLocal
         test = storage[11]
         assert False, "Exception is not caught"
     except KeyError:
@@ -224,6 +278,7 @@ def test_kv_store_sqlite():
         pass
 
     try:
+        # noinspection PyUnusedLocal
         test = storage["12"]
         assert False, "Exception is not caught"
     except TypeError:
@@ -265,6 +320,7 @@ def test_kv_store_shelve():
     storage["10"] = ["size"] * 5
 
     try:
+        # noinspection PyUnusedLocal
         test = storage["11"]
         assert False, "Exception is not caught"
     except KeyError:
@@ -277,6 +333,7 @@ def test_kv_store_shelve():
         pass
 
     try:
+        # noinspection PyUnusedLocal
         test = storage[12]
         assert False, "Exception is not caught"
     except TypeError:
@@ -305,10 +362,10 @@ def test_kv_store_shelve():
 
 def test_context_manager():
     from nhkv import get_or_create_storage
-    from nhkv import DbDict
+    from nhkv import SqliteDbDict
     dbdict_path = "dbdict.db"
-    storage1 = get_or_create_storage(DbDict, path=dbdict_path)
-    storage2 = get_or_create_storage(DbDict, path=dbdict_path)
+    storage1 = get_or_create_storage(SqliteDbDict, path=dbdict_path)
+    storage2 = get_or_create_storage(SqliteDbDict, path=dbdict_path)
     assert id(storage1) == id(storage2)
 
     from nhkv import KVStore
@@ -330,6 +387,7 @@ def test_storage_lock():
     storage1 = get_or_create_storage(KVStore, path=storage_path)
     storage1[0] = "test"
     assert storage_path.joinpath("lock").is_file()
+    # noinspection PyUnusedLocal
     test = storage1[0]
     assert not storage_path.joinpath("lock").is_file()
     storage1[0] = "test"
