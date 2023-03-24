@@ -1,7 +1,8 @@
 import sys
 import time
+from collections import defaultdict
 
-from nhkv import CompactKeyValueStore, DbDict, KVStore
+from nhkv import CompactKeyValueStore, SqliteDbDict, KVStore
 import shelve
 import sqlite3
 
@@ -9,13 +10,17 @@ import sqlite3
 try:
     from sqlitedict import SqliteDict
     from diskcache import Index
+    import leveldb
+    import rocksdb
     import pandas as pd
-except ImportError:
-    print("Install extra packages: pip install pandas sqlitedict diskcache")
+    import matplotlib.pyplot as plt
+except ImportError as e:
+    print(e)
+    print("Install extra packages: pip install pandas sqlitedict diskcache matplotlib leveldb python-rocksdb")
     sys.exit()
 
 
-def test_sqlite3_write(texts, datasize, str_len):
+def sqlite3_write(texts, datasize, str_len):
     conn = sqlite3.connect(f"sqlite_{datasize}_{str_len}.s3db")
     cur = conn.cursor()
     cur.execute("CREATE TABLE IF NOT EXISTS [mydict] ("
@@ -29,54 +34,7 @@ def test_sqlite3_write(texts, datasize, str_len):
     conn.close()
 
 
-def test_shelve_write(texts, datasize, str_len):
-    d = shelve.open(f"shelve_{datasize}_{str_len}.shelf", protocol=4)
-    for i, line in enumerate(texts):
-        d[str(i)] = line
-    d.close()
-
-
-def test_sqlitedict_write(texts, datasize, str_len):
-    d = SqliteDict(f'sqlitedict_{datasize}_{str_len}.sqlite', outer_stack=False, autocommit=False)
-    for i, line in enumerate(texts):
-        d[str(i)] = line
-    d.commit()
-    d.close()
-
-
-def test_DbDict_write(texts, datasize, str_len):
-    d = DbDict(f"dbdict_{datasize}_{str_len}.s3db")
-    for i, line in enumerate(texts):
-        d[str(i)] = line
-    d.save()
-    d.close()
-
-
-def test_kvstore_write(texts, datasize, str_len):
-    d = CompactKeyValueStore(f"compactkv_{datasize}_{str_len}.kv")
-    for i, line in enumerate(texts):
-        d[i] = line
-    d._flush_shards()
-    d.close()
-    d.save()
-
-
-def test_diskkvstore_write(texts, datasize, str_len):
-    d = KVStore(f"kvstore_{datasize}_{str_len}.diskkv")
-    for i, line in enumerate(texts):
-        d[i] = line
-    d._flush_shards()
-    d.close()
-    d.save()
-
-
-def test_diskcache_write(texts, datasize, str_len):
-    d = Index(f"diskcache_{datasize}_{str_len}")
-    for i, line in enumerate(texts):
-        d[i] = line
-
-
-def test_sqlite3_read(texts, datasize, str_len):
+def sqlite3_read(texts, datasize, str_len):
     conn = sqlite3.connect(f"sqlite_{datasize}_{str_len}.s3db")
     cur = conn.cursor()
     for i, text in enumerate(texts):
@@ -87,7 +45,14 @@ def test_sqlite3_read(texts, datasize, str_len):
     conn.close()
 
 
-def test_shelve_read(texts, datasize, str_len):
+def shelve_write(texts, datasize, str_len):
+    d = shelve.open(f"shelve_{datasize}_{str_len}.shelf", protocol=4)
+    for i, line in enumerate(texts):
+        d[str(i)] = line
+    d.close()
+
+
+def shelve_read(texts, datasize, str_len):
     d = shelve.open(f"shelve_{datasize}_{str_len}.shelf", protocol=4)
     for i, text in enumerate(texts):
         a = d[str(i)]
@@ -95,7 +60,15 @@ def test_shelve_read(texts, datasize, str_len):
     d.close()
 
 
-def test_sqlitedict_read(texts, datasize, str_len):
+def sqlitedict_write(texts, datasize, str_len):
+    d = SqliteDict(f'sqlitedict_{datasize}_{str_len}.sqlite', outer_stack=False, autocommit=False)
+    for i, line in enumerate(texts):
+        d[str(i)] = line
+    d.commit()
+    d.close()
+
+
+def sqlitedict_read(texts, datasize, str_len):
     d = SqliteDict(f'sqlitedict_{datasize}_{str_len}.sqlite', outer_stack=False, autocommit=False)
     for i, text in enumerate(texts):
         a = d[str(i)]
@@ -103,15 +76,31 @@ def test_sqlitedict_read(texts, datasize, str_len):
     d.close()
 
 
-def test_DbDict_read(texts, datasize, str_len):
-    d = DbDict(f"dbdict_{datasize}_{str_len}.s3db")
+def DbDict_write(texts, datasize, str_len):
+    d = SqliteDbDict(f"dbdict_{datasize}_{str_len}.s3db")
+    for i, line in enumerate(texts):
+        d[str(i)] = line
+    d.save()
+    d.close()
+
+
+def DbDict_read(texts, datasize, str_len):
+    d = SqliteDbDict(f"dbdict_{datasize}_{str_len}.s3db")
     for i, text in enumerate(texts):
         a = d[str(i)]
         assert a == text
     d.close()
 
+def compactkvstore_write(texts, datasize, str_len):
+    d = CompactKeyValueStore(f"compactkv_{datasize}_{str_len}.kv")
+    for i, line in enumerate(texts):
+        d[i] = line
+    d._flush_shards()
+    d.close()
+    d.save()
 
-def test_kvstore_read(texts, datasize, str_len):
+
+def compactkvstore_read(texts, datasize, str_len):
     d = CompactKeyValueStore.load(f"compactkv_{datasize}_{str_len}.kv")
     for i, text in enumerate(texts):
         a = d[i]
@@ -119,7 +108,16 @@ def test_kvstore_read(texts, datasize, str_len):
     d.close()
 
 
-def test_diskkvstore_read(texts, datasize, str_len):
+def kvstore_write(texts, datasize, str_len):
+    d = KVStore(f"kvstore_{datasize}_{str_len}.diskkv")
+    for i, line in enumerate(texts):
+        d[i] = line
+    d._flush_shards()
+    d.close()
+    d.save()
+
+
+def kvstore_read(texts, datasize, str_len):
     d = KVStore.load(f"kvstore_{datasize}_{str_len}.diskkv")
     for i, text in enumerate(texts):
         a = d[i]
@@ -127,12 +125,45 @@ def test_diskkvstore_read(texts, datasize, str_len):
     d.close()
 
 
-def test_diskcache_read(texts, datasize, str_len):
+def diskcache_write(texts, datasize, str_len):
+    d = Index(f"diskcache_{datasize}_{str_len}")
+    for i, line in enumerate(texts):
+        d[i] = line
+
+
+def diskcache_read(texts, datasize, str_len):
     d = Index(f"diskcache_{datasize}_{str_len}")
     for i, text in enumerate(texts):
         a = d[i]
         assert a == text
 
+
+def leveldb_write(texts, datasize, str_len):
+    db = leveldb.LevelDB(f"leveldb_{datasize}_{str_len}", create_if_missing=True)
+    for i, line in enumerate(texts):
+        db.Put(f"{i}".encode("utf-8"), line.encode("utf-8"), sync=False)
+    # db
+
+
+def leveldb_read(texts, datasize, str_len):
+    db = leveldb.LevelDB(f"leveldb_{datasize}_{str_len}")
+    for i, text in enumerate(texts):
+        a = db.Get(f"{i}".encode("utf-8")).decode("utf-8")
+        assert a == text
+
+
+def rocksdb_write(texts, datasize, str_len):
+    db = rocksdb.DB(f"rocksdb_{datasize}_{str_len}", rocksdb.Options(create_if_missing=True))
+    for i, line in enumerate(texts):
+        db.put(f"{i}".encode("utf-8"), line.encode("utf-8"), sync=False)
+    # db
+
+
+def rocksdb_read(texts, datasize, str_len):
+    db = rocksdb.DB(f"rocksdb_{datasize}_{str_len}", rocksdb.Options(create_if_missing=False))
+    for i, text in enumerate(texts):
+        a = db.get(f"{i}".encode("utf-8")).decode("utf-8")
+        assert a == text
 
 class TextReader:
     def __init__(self, path, limit_length=None, datasize=None):
@@ -162,211 +193,162 @@ class TextReader:
             else:
                 yield
 
-text_path = sys.argv[1]
 
-writes = {
-    "data size": [],
-    "avg len": [],
-    "sqlite3": [],
-    # "shelve": [],
-    "sqlitedict": [],
-    "DbDict": [],
-    "CompactKVStore": [],
-    "KVStore": [],
-    "DiskCache": []
+def benchmark_writes(text_path, test_str_lens, test_num_entries, storage_types):
+
+    writes = defaultdict(list)
+
+    prev_len = None
+    prev_count = None
+
+    for str_len in test_str_lens:
+        for datasize in test_num_entries:
+
+            texts = TextReader(text_path, str_len, datasize)
+
+            if prev_len == texts.average_len and prev_count == texts.line_count:
+                break
+
+            prev_len = texts.average_len
+            prev_count = texts.line_count
+
+            writes["data size"].append(texts.line_count)
+            writes["avg len"].append(texts.average_len)
+
+            for storage_type in storage_types:
+                write_fn = write_fns[storage_type]
+                start_time = time.time()
+                write_fn(texts, texts.line_count, texts.average_len)
+                end_time = time.time()
+                print("--- %s seconds ---" % (end_time - start_time))
+                writes[storage_type].append(end_time - start_time)
+
+    writes = pd.DataFrame.from_dict(writes)
+    writes.to_csv("writes.csv", index=False)
+
+
+def benchmark_reads(text_path, test_str_lens, test_num_entries, storage_types):
+    reads = defaultdict(list)
+
+    prev_len = None
+    prev_count = None
+
+    for str_len in test_str_lens:
+        for datasize in test_num_entries:
+
+            texts = TextReader(text_path, str_len, datasize)
+            if prev_len == texts.average_len and prev_count == texts.line_count:
+                break
+
+            prev_len = texts.average_len
+            prev_count = texts.line_count
+
+            reads["data size"].append(texts.line_count)
+            reads["avg len"].append(texts.average_len)
+
+            for storage_type in storage_types:
+
+                read_fn = read_fns[storage_type]
+
+                start_time = time.time()
+                read_fn(texts, texts.line_count, texts.average_len)
+                end_time = time.time()
+                print("--- %s seconds ---" % (end_time - start_time))
+                reads[storage_type].append(end_time - start_time)
+
+    reads = pd.DataFrame.from_dict(reads)
+    reads.to_csv("reads.csv", index=False)
+
+
+def plot_writes():
+    writes = pd.read_csv("writes.csv")
+    available_storage = [k for k in writes.columns if k not in {"data size", "avg len"}]
+    writes_data_size = writes.query("`data size` == 100001")
+    plt.plot(writes_data_size["avg len"],
+             writes_data_size[available_storage])
+    plt.legend(available_storage)
+    plt.xlabel("Average string length")
+    plt.ylabel("Time required, s")
+    plt.gca().set_xscale("log")
+    plt.title("Write time vs entry size")
+    plt.savefig("write_time_vs_entry_size.png")
+    plt.close()
+
+    writes_avg_len = writes.query("`avg len` > 100 and `avg len` < 2000")
+    plt.plot(writes_avg_len["data size"],
+             writes_avg_len[available_storage])
+    plt.legend(available_storage)
+    plt.xlabel("Number of entries")
+    plt.ylabel("Time required, s")
+    # plt.gca().set_xscale("log")
+    plt.title("Write time vs dataset size")
+    plt.savefig("write_time_vs_dataset_size.png")
+    plt.close()
+
+
+def plot_reads():
+    reads = pd.read_csv("reads.csv")
+    available_storage = [k for k in reads.columns if k not in {"data size", "avg len"}]
+    reads_data_size = reads.query("`data size` == 100001")
+    plt.plot(reads_data_size["avg len"],
+             reads_data_size[available_storage])
+    plt.legend(available_storage)
+    plt.xlabel("Average string length")
+    plt.ylabel("Time required, s")
+    plt.gca().set_xscale("log")
+    plt.title("Read time vs entry size")
+    plt.savefig("read_time_vs_entry_size.png")
+    plt.close()
+
+    reads_avg_len = reads.query("`avg len` > 100 and `avg len` < 2000")
+    plt.plot(reads_avg_len["data size"],
+             reads_avg_len[available_storage])
+    plt.legend(available_storage)
+    plt.xlabel("Number of entries")
+    plt.ylabel("Time required, s")
+    plt.title("Read time vs dataset size")
+    # plt.gca().set_xscale("log")
+    plt.savefig("read_time_vs_dataset_size.png")
+    plt.close()
+
+
+write_fns = {
+    "Sqlite3": sqlite3_write,
+    # "Shelve": shelve_write,
+    "SqliteDict": sqlitedict_write,
+    "DbDict": DbDict_write,
+    "CompactStorage": compactkvstore_write,
+    "KVStore": kvstore_write,
+    "DiskCache": diskcache_write,
+    "LevelDb": leveldb_write,
+    "RocksDB": rocksdb_write,
 }
 
-prev_len = None
-prev_count = None
 
-for str_len in [10, 100, 1000, 3000, 6000, 10000]:
-    for datasize in [1e4, 3e4, 6e4, 1e5, 1e6]:
-
-        texts = TextReader(text_path, str_len, datasize)
-
-        if prev_len == texts.average_len and prev_count == texts.line_count:
-            break
-
-        prev_len = texts.average_len
-        prev_count = texts.line_count
-
-        writes["data size"].append(texts.line_count)
-        writes["avg len"].append(texts.average_len)
-
-        start_time = time.time()
-        test_sqlite3_write(texts, texts.line_count, texts.average_len)
-        end_time = time.time()
-        print("--- %s seconds ---" % (end_time - start_time))
-        writes["sqlite3"].append(end_time - start_time)
-        # writes.append({"Type": "sqlite3", "datasize": datasize, "time": end_time - start_time})
-
-        # start_time = time.time()
-        # test_shelve_write(texts, texts.line_count, texts.average_len)
-        # end_time = time.time()
-        # print("--- %s seconds ---" % (end_time - start_time))
-        # writes["shelve"].append(end_time - start_time)
-        # # writes.append({"Type": "shelve", "datasize": datasize, "time": end_time - start_time})
-
-        start_time = time.time()
-        test_sqlitedict_write(texts, texts.line_count, texts.average_len)
-        end_time = time.time()
-        print("--- %s seconds ---" % (end_time - start_time))
-        writes["sqlitedict"].append(end_time - start_time)
-        # writes.append({"Type": "sqlitedict", "datasize": datasize, "time": end_time - start_time})
-
-        start_time = time.time()
-        test_DbDict_write(texts, texts.line_count, texts.average_len)
-        end_time = time.time()
-        print("--- %s seconds ---" % (end_time - start_time))
-        writes["DbDict"].append(end_time - start_time)
-        # writes.append({"Type": "DbDict", "datasize": datasize, "time": end_time - start_time})
-
-        start_time = time.time()
-        test_kvstore_write(texts, texts.line_count, texts.average_len)
-        end_time = time.time()
-        print("--- %s seconds ---" % (end_time - start_time))
-        writes["CompactKVStore"].append(end_time - start_time)
-        # writes.append({"Type": "KVStore", "datasize": datasize, "time": end_time - start_time})
-
-        start_time = time.time()
-        test_diskkvstore_write(texts, texts.line_count, texts.average_len)
-        end_time = time.time()
-        print("--- %s seconds ---" % (end_time - start_time))
-        writes["KVStore"].append(end_time - start_time)
-        # writes.append({"Type": "KVStore", "datasize": datasize, "time": end_time - start_time})
-
-        start_time = time.time()
-        test_diskcache_write(texts, texts.line_count, texts.average_len)
-        end_time = time.time()
-        print("--- %s seconds ---" % (end_time - start_time))
-        writes["DiskCache"].append(end_time - start_time)
-        # writes.append({"Type": "KVStore", "datasize": datasize, "time": end_time - start_time})
-
-writes = pd.DataFrame.from_dict(writes)
-# writes = writes.set_index("index")
-writes.to_csv("writes.csv")
-
-reads = {
-    "data size": [],
-    "avg len": [],
-    "sqlite3": [],
-    # "shelve": [],
-    "sqlitedict": [],
-    "DbDict": [],
-    "CompactKVStore": [],
-    "KVStore": [],
-    "DiskCache": []
+read_fns = {
+    "Sqlite3": sqlite3_read,
+    # "Shelve": shelve_read,
+    "SqliteDict": sqlitedict_read,
+    "DbDict": DbDict_read,
+    "CompactStorage": compactkvstore_read,
+    "KVStore": kvstore_read,
+    "DiskCache": diskcache_read,
+    "LevelDb": leveldb_read,
+    "RocksDB": rocksdb_read,
 }
 
-prev_len = None
-prev_count = None
 
-for str_len in [10, 100, 1000, 3000, 6000, 10000]:
-    for datasize in [1e4, 3e4, 6e4, 1e5, 1e6]:
-        texts = TextReader(text_path, str_len, datasize)
+def run_benchmarks():
+    text_path = sys.argv[1]
+    test_str_lens = [10, 100, 1000, 3000, 6000, 10000]
+    test_num_entries = [1e4, 3e4, 6e4, 1e5, 1e6]
+    storage_types = ["RocksDB"] #["LevelDb"]# ["Sqlite3", "SqliteDict", "DbDict", "CompactStorage", "KVStore", "DiskCache"]
 
-        if prev_len == texts.average_len and prev_count == texts.line_count:
-            break
+    # benchmark_writes(text_path, test_str_lens, test_num_entries, storage_types)
+    # benchmark_reads(text_path, test_str_lens, test_num_entries, storage_types)
+    plot_writes()
+    plot_reads()
 
-        prev_len = texts.average_len
-        prev_count = texts.line_count
 
-        reads["data size"].append(texts.line_count)
-        reads["avg len"].append(texts.average_len)
-
-        start_time = time.time()
-        test_sqlite3_read(texts, texts.line_count, texts.average_len)
-        end_time = time.time()
-        print("--- %s seconds ---" % (end_time - start_time))
-        reads["sqlite3"].append(end_time - start_time)
-        # reads.append({"Type": "sqlite3", "datasize": datasize, "time": end_time - start_time})
-
-        # start_time = time.time()
-        # test_shelve_read(texts, texts.line_count, texts.average_len)
-        # end_time = time.time()
-        # print("--- %s seconds ---" % (end_time - start_time))
-        # reads["shelve"].append(end_time - start_time)
-        # # reads.append({"Type": "shelve", "datasize": datasize, "time": end_time - start_time})
-
-        start_time = time.time()
-        test_sqlitedict_read(texts, texts.line_count, texts.average_len)
-        end_time = time.time()
-        print("--- %s seconds ---" % (end_time - start_time))
-        reads["sqlitedict"].append(end_time - start_time)
-        # reads.append({"Type": "sqlitedict", "datasize": datasize, "time": end_time - start_time})
-
-        start_time = time.time()
-        test_DbDict_read(texts, texts.line_count, texts.average_len)
-        end_time = time.time()
-        print("--- %s seconds ---" % (end_time - start_time))
-        reads["DbDict"].append(end_time - start_time)
-        # reads.append({"Type": "DbDict", "datasize": datasize, "time": end_time - start_time})
-
-        start_time = time.time()
-        test_kvstore_read(texts, texts.line_count, texts.average_len)
-        end_time = time.time()
-        print("--- %s seconds ---" % (end_time - start_time))
-        reads["CompactKVStore"].append(end_time - start_time)
-        # reads.append({"Type": "KVStore", "datasize": datasize, "time": end_time - start_time})
-
-        start_time = time.time()
-        test_diskkvstore_read(texts, texts.line_count, texts.average_len)
-        end_time = time.time()
-        print("--- %s seconds ---" % (end_time - start_time))
-        reads["KVStore"].append(end_time - start_time)
-        # reads.append({"Type": "KVStore", "datasize": datasize, "time": end_time - start_time})
-
-        start_time = time.time()
-        test_diskcache_read(texts, texts.line_count, texts.average_len)
-        end_time = time.time()
-        print("--- %s seconds ---" % (end_time - start_time))
-        reads["DiskCache"].append(end_time - start_time)
-        # reads.append({"Type": "KVStore", "datasize": datasize, "time": end_time - start_time})
-
-reads = pd.DataFrame.from_dict(reads)
-# reads = reads.set_index("index")
-reads.to_csv("reads.csv")
-
-import matplotlib.pyplot as plt
-
-writes = pd.read_csv("writes.csv")
-writes_data_size = writes.query("`data size` == 100001")
-plt.plot(writes_data_size["avg len"], writes_data_size[["sqlite3", "sqlitedict", "DbDict", "CompactKVStore", "KVStore", "DiskCache"]])
-plt.legend(["Sqlite3", "SqliteDict", "DbDict", "CompactStorage", "KVStore", "DiskCache"])
-plt.xlabel("Average string length")
-plt.ylabel("Time required, s")
-plt.gca().set_xscale("log")
-plt.title("Write time vs entry size")
-plt.savefig("write_time_vs_entry_size.png")
-plt.close()
-
-writes_avg_len = writes.query("`avg len` > 100 and `avg len` < 2000")
-plt.plot(writes_avg_len["data size"], writes_avg_len[["sqlite3", "sqlitedict", "DbDict", "CompactKVStore", "KVStore", "DiskCache"]])
-plt.legend(["Sqlite3", "SqliteDict", "DbDict", "CompactStorage", "KVStore", "DiskCache"])
-plt.xlabel("Number of entries")
-plt.ylabel("Time required, s")
-# plt.gca().set_xscale("log")
-plt.title("Write time vs dataset size")
-plt.savefig("write_time_vs_dataset_size.png")
-plt.close()
-
-reads = pd.read_csv("reads.csv")
-reads_data_size = reads.query("`data size` == 100001")
-plt.plot(reads_data_size["avg len"], reads_data_size[["sqlite3", "sqlitedict", "DbDict", "CompactKVStore", "KVStore", "DiskCache"]])
-plt.legend(["Sqlite3", "SqliteDict", "DbDict", "CompactKVStore", "KVStore", "DiskCache"])
-plt.xlabel("Average string length")
-plt.ylabel("Time required, s")
-plt.gca().set_xscale("log")
-plt.title("Read time vs entry size")
-plt.savefig("read_time_vs_entry_size.png")
-plt.close()
-
-reads_avg_len = reads.query("`avg len` > 100 and `avg len` < 2000")
-plt.plot(reads_avg_len["data size"], reads_avg_len[["sqlite3", "sqlitedict", "DbDict", "CompactKVStore", "KVStore", "DiskCache"]])
-plt.legend(["Sqlite3", "SqliteDict", "DbDict", "CompactKVStore", "KVStore", "DiskCache"])
-plt.xlabel("Number of entries")
-plt.ylabel("Time required, s")
-plt.title("Read time vs dataset size")
-# plt.gca().set_xscale("log")
-plt.savefig("read_time_vs_dataset_size.png")
-plt.close()
+if __name__ == "__main__":
+    run_benchmarks()
