@@ -176,7 +176,10 @@ def test_auto_db_dict():
 
     for backend in ["rocksdb", "leveldb"]:
         str_db_path = f"test_str_key_{backend}.db"
-        storage = AutoDbDict(str_db_path, backend)
+        try:
+            storage = AutoDbDict(str_db_path, backend)
+        except ImportError:
+            continue
         # noinspection DuplicatedCode
         storage["1"] = 2
         storage["0"] = 1
