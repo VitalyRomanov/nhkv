@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from nhkv.DbDict import DbDict
 from nhkv.KVStore import KVStore, CompactKeyValueStore
+from nhkv.dbdict import *
 
 
 class _ContextManager:

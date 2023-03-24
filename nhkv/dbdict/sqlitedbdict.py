@@ -3,21 +3,21 @@ import pickle
 from typing import Union, Type, Optional
 
 
-class DbDict:
+class SqliteDbDict:
     """
-    DbDict is a class for storing key-value pairs in Sqlite3 database. Keys can have types `int` or `str`, and must
-    be passed to the object constructor. The values are stored as pickled objects.
+    SqliteDbDict is a class for storing key-value pairs in Sqlite3 database. Keys can have types `int` or `str`, and
+    must be passed to the object constructor. The values are stored as pickled objects.
     """
     STR_KEY_LIMIT = 512
     _is_open = False
 
     def __init__(self, path, key_type: Union[Type[int], Type[str]] = str, str_key_lim: Optional[int] = None):
         """
-        Create a Sqlite3-backed key-value storage.
+        Create a Sqlite3-backed key-value storage
         :param path: path to the location where database file will be created. If the file exists, existing storage is
-        loaded.
+        loaded
         :param key_type: Possible key types are `int` and `str` (pass Python type names, not strings)
-        :param str_key_lim: Maximum length for string keys.
+        :param str_key_lim: Maximum length for string keys
         """
         self.path = path
         self._conn = sqlite3.connect(path)
