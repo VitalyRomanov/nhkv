@@ -334,4 +334,13 @@ def test_storage_lock():
     assert not storage_path.joinpath("lock").is_file()
     storage1[0] = "test"
     storage1.save()
+
+    storage1[1] = "test"
+    assert storage_path.joinpath("lock").is_file()
+    storage1.save()
+    assert not storage_path.joinpath("lock").is_file()
+    storage1[1] = "test"
+    assert storage_path.joinpath("lock").is_file()
+    storage1.save()
+    assert not storage_path.joinpath("lock").is_file()
     shutil.rmtree(storage_path)
