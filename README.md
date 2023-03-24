@@ -24,17 +24,37 @@ storage.save()
 
 ## Available Storage Classes
 
-### DbDict
-Data is stored in Sqlite3 database. THe idea id similar to `SqliteDict`. Functionality of `DbDict` is inferior to `SqliteDict`, but overhead is also smaller. 
+### SqliteDbDict
+Data is stored in Sqlite3 database. The idea id similar to `SqliteDict`. Functionality of `SqliteDbDict` is inferior to `SqliteDict`, but overhead is also smaller.
 
 ```python
-from nhkv import DbDict
+from nhkv import SqliteDbDict, AutoDbDict
 
-storage = DbDict("path/to/storage/location", key_type=str)  # a database file is created
+storage = SqliteDbDict("path/to/storage/location", key_type=str)  # a database file is created
+# storage = AutoDbDict("path/to/storage/location", backend="sqlite3", key_type=str)
 # can also use int keys
 storage["string key"] = "python serializable object"
 storage.save()  # database transaction is not completed until saved explicitly
 # frequent saving affects performance
+```
+
+### RocksDbDict and LevelDbDict
+There are options to use `rocksdb` and `leveldb`, but need to install these dependencies manually.
+```bash
+apt install rocksdb leveldb
+pip install leveldb python-rocksdb
+```
+Can import LevelDbDict, RocksDbDict or simply use AutoDbDict (also works with SqliteDbDict).
+```python
+from nhkv import AutoDbDict, LevelDbDict, RocksDbDict
+
+storage = AutoDbDict("path/to/storage/location", backend="rocksdb")  # a database file is created
+storage["string key"] = "python serializable object"
+retrieved = storage["string key"]
+
+storage = AutoDbDict("path/to/storage/location", backend="leveldb")  # a database file is created
+storage["string key"] = "python serializable object"
+retrieved = storage["string key"]
 ```
 
 ### CompactKeyValueStore
@@ -88,13 +108,13 @@ NHKV is closely related to libraries such as
 2. `SqliteDict` - slower reads and writes, but more functionality (eg. multiprocessing)
 3. `DiskCache` - slower reads and writes, but more functionality (eg. cache features)
 
-![Write Time vs Dataset Size](https://i.imgur.com/uxLIdRg.png)
+![Write Time vs Dataset Size](https://i.imgur.com/daem9SK.png)
 
-![Write Time vs Entry Size](https://i.imgur.com/1b1HPtX.png)
+![Write Time vs Entry Size](https://i.imgur.com/frXNAPA.png)
 
-![Read Time vs Dataset Size](https://i.imgur.com/K8q9nfK.png)
+![Read Time vs Dataset Size](https://i.imgur.com/Tq2naN1.png)
 
-![Read Time vs Entry Size](https://i.imgur.com/wHTQ0Kt.png)
+![Read Time vs Entry Size](https://i.imgur.com/R7geN9n.png)
 
 ## Limitation
 
